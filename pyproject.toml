@@ -1,0 +1,19 @@
+[project]
+name = "auto-test-tool"
+version = "0.1.0"
+description = "自动化测试工具，用于IT8811和DMM6500设备"
+authors = [
+    { name = "User", email = "user@example.com" }
+]
+dependencies = [
+    "pyvisa>=1.14.0",
+    "openpyxl>=3.1.0"
+]
+
+[tool.setuptools]
+packages = ["smart_instrument"]
+package_dir = { "smart_instrument" = "src/smart_instrument" }
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
