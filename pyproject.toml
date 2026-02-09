@@ -12,7 +12,9 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["smart_instrument"]
-package_dir = { "smart_instrument" = "src/smart_instrument" }
+
+[tool.setuptools.package-dir]
+smart_instrument = "src/smart_instrument"
 
 [build-system]
 requires = ["setuptools", "wheel"]

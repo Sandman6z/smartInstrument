@@ -1,12 +1,28 @@
+import sys
+import os
+
+# 确保可以直接运行此文件
+if __name__ == "__main__":
+    # 获取项目根目录
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    # 添加src目录到Python路径
+    sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
+    # 现在使用绝对导入
+    from smart_instrument.device.controller import DeviceController
+    from smart_instrument.data.manager import DataManager
+    from smart_instrument.config import Config
+else:
+    # 作为模块导入时，使用相对导入
+    from .device.controller import DeviceController
+    from .data.manager import DataManager
+    from .config import Config
+
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import pyvisa
 import csv
 from datetime import datetime
 import threading
-from smart_instrument.device.controller import DeviceController
-from smart_instrument.data.manager import DataManager
-from smart_instrument.config import Config
 
 class AutoTestTool:
     def __init__(self, root):
