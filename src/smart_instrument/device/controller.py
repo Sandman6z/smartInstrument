@@ -8,9 +8,11 @@ class DeviceController:
         # 设备资源
         self.it8811 = None
         self.dmm6500 = None
+        self.keysight_34461a = None
         # 设备连接状态
         self.it8811_connected = False
         self.dmm6500_connected = False
+        self.keysight_34461a_connected = False
     
     def scan_devices(self):
         """扫描可用的VISA设备"""
@@ -24,6 +26,7 @@ class DeviceController:
             # 存储找到的设备
             it8811_device = None
             dmm6500_device = None
+            keysight_34461a_device = None
             
             # 获取每个设备的IDN信息
             for resource in resources:
@@ -60,7 +63,7 @@ class DeviceController:
                             # 构建更清晰的显示文本
                             display_text = f"{manufacturer} {model} ({resource})"
                             
-                            # 识别IT8811和DMM6500设备
+                            # 识别IT8811、DMM6500和KEYSIGHT 34461A设备
                             print(f"  制造商: {manufacturer}, 型号: {model}")
                             if "IT8811" in model or "IT8811" in idn:
                                 print(f"  识别为IT8811设备")
@@ -68,6 +71,9 @@ class DeviceController:
                             elif "DMM6500" in model or "DMM6500" in idn:
                                 print(f"  识别为DMM6500设备")
                                 dmm6500_device = display_text
+                            elif "34461A" in model or "34461A" in idn:
+                                print(f"  识别为KEYSIGHT 34461A设备")
+                                keysight_34461a_device = display_text
                         else:
                             # 如果IDN格式不正确，使用原始IDN
                             display_text = f"{idn} ({resource})"
@@ -90,11 +96,12 @@ class DeviceController:
             print(f"找到的设备: {device_list}")
             print(f"识别到的IT8811: {it8811_device}")
             print(f"识别到的DMM6500: {dmm6500_device}")
+            print(f"识别到的KEYSIGHT 34461A: {keysight_34461a_device}")
             
-            return device_list, device_info, it8811_device, dmm6500_device
+            return device_list, device_info, it8811_device, dmm6500_device, keysight_34461a_device
         except Exception as e:
             print(f"扫描设备失败: {str(e)}")
-            return [], {}, None, None
+            return [], {}, None, None, None
     
     def connect_it8811(self, resource):
         """连接IT8811"""
@@ -206,6 +213,67 @@ class DeviceController:
             return True, "DMM6500断开连接成功"
         except Exception as e:
             return False, f"断开DMM6500连接失败: {str(e)}"
+    
+    def connect_keysight_34461a(self, resource):
+        """连接KEYSIGHT 34461A并设置为DCI模式"""
+        try:
+            # 设置连接超时
+            self.keysight_34461a = self.rm.open_resource(resource)
+            self.keysight_34461a.timeout = 5000  # 5秒超时
+            
+            # 测试连接
+            try:
+                self.keysight_34461a.write("*IDN?")
+                idn = self.keysight_34461a.read()
+                print(f"KEYSIGHT 34461A IDN: {idn}")
+                
+                # 设置为DCI模式（直流电流）
+                self.keysight_34461a.write("FUNCTION 'CURRent:DC'")
+                print("KEYSIGHT 34461A设置为DCI模式")
+                
+                self.keysight_34461a_connected = True
+                return True, "KEYSIGHT 34461A连接成功并设置为DCI模式"
+            except pyvisa.errors.VisaIOError as e:
+                if "timeout" in str(e).lower():
+                    return False, "连接KEYSIGHT 34461A超时，请检查设备连接"
+                else:
+                    return False, f"连接KEYSIGHT 34461A失败: {str(e)}"
+        except Exception as e:
+            return False, f"连接KEYSIGHT 34461A失败: {str(e)}"
+    
+    def disconnect_keysight_34461a(self):
+        """断开KEYSIGHT 34461A连接"""
+        try:
+            if self.keysight_34461a:
+                self.keysight_34461a.close()
+                self.keysight_34461a = None
+            self.keysight_34461a_connected = False
+            return True, "KEYSIGHT 34461A断开连接成功"
+        except Exception as e:
+            return False, f"断开KEYSIGHT 34461A连接失败: {str(e)}"
+    
+    def get_current(self):
+        """获取KEYSIGHT 34461A的电流值"""
+        if not self.keysight_34461a_connected:
+            return False, "请先连接KEYSIGHT 34461A"
+        
+        try:
+            # 尝试多种测量命令
+            measure_commands = ["MEAS:CURR:DC?", "CURR:DC?", "MEASURE:CURRENT:DC?", "READ?"]
+            for cmd in measure_commands:
+                try:
+                    self.keysight_34461a.write(cmd)
+                    current = self.keysight_34461a.read().strip()
+                    print(f"获取电流值成功: {current}")
+                    return True, current
+                except Exception as e:
+                    print(f"测量命令 {cmd} 失败: {str(e)}")
+                    continue
+            
+            # 所有命令都失败
+            return False, "所有测量命令都失败"
+        except Exception as e:
+            return False, f"获取电流值失败: {str(e)}"
     
     def set_resistance(self, resistance):
         """设置IT8811的电阻值"""

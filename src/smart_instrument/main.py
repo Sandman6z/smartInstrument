@@ -40,6 +40,9 @@ class AutoTestTool:
         # 输出状态
         self.output_state = "OFF"
         
+        # 数据存储
+        self.data = []
+        
         # 创建GUI
         self.create_widgets()
         
@@ -80,6 +83,19 @@ class AutoTestTool:
         self.dmm6500_button.pack(side=tk.LEFT, padx=5)
         self.dmm6500_status = ttk.Label(dmm6500_frame, text="未连接", foreground="red")
         self.dmm6500_status.pack(side=tk.LEFT, padx=5)
+        
+        # KEYSIGHT 34461A连接
+        keysight_frame = ttk.Frame(device_frame)
+        keysight_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(keysight_frame, text="KEYSIGHT资源:", width=15).pack(side=tk.LEFT, padx=5)
+        self.keysight_resource = ttk.Combobox(keysight_frame, width=30)
+        self.keysight_resource.pack(side=tk.LEFT, padx=5)
+        
+        self.keysight_button = ttk.Button(keysight_frame, text="连接", command=self.connect_keysight_34461a)
+        self.keysight_button.pack(side=tk.LEFT, padx=5)
+        self.keysight_status = ttk.Label(keysight_frame, text="未连接", foreground="red")
+        self.keysight_status.pack(side=tk.LEFT, padx=5)
         
         # IT8811控制部分
         it8811_control_frame = ttk.LabelFrame(main_frame, text="IT8811控制", padding="10")
@@ -182,6 +198,7 @@ class AutoTestTool:
         # 添加设备行
         self.tree.insert("", tk.END, text="IT8811 (电阻)")
         self.tree.insert("", tk.END, text="DMM6500 (电压)")
+        self.tree.insert("", tk.END, text="KEYSIGHT 34461A (电流)")
         
         self.tree.pack(fill=tk.BOTH, expand=True)
         
@@ -195,7 +212,7 @@ class AutoTestTool:
         """扫描可用的VISA设备"""
         try:
             # 使用device_controller扫描设备
-            device_list, self.device_info, it8811_device, dmm6500_device = self.device_controller.scan_devices()
+            device_list, self.device_info, it8811_device, dmm6500_device, keysight_34461a_device = self.device_controller.scan_devices()
             
             # 如果没有找到设备，显示提示
             if not device_list:
@@ -212,6 +229,7 @@ class AutoTestTool:
             # 设置设备列表
             self.it8811_resource['values'] = device_list
             self.dmm6500_resource['values'] = device_list
+            self.keysight_resource['values'] = device_list
             
             # 自动选择设备
             if it8811_device:
@@ -224,9 +242,14 @@ class AutoTestTool:
                 msg = f"自动选择DMM6500设备: {dmm6500_device}"
                 print(msg)
                 self.log(msg)
+            if keysight_34461a_device:
+                self.keysight_resource.set(keysight_34461a_device)
+                msg = f"自动选择KEYSIGHT 34461A设备: {keysight_34461a_device}"
+                print(msg)
+                self.log(msg)
                 
             # 如果找到设备，自动连接
-            if it8811_device or dmm6500_device:
+            if it8811_device or dmm6500_device or keysight_34461a_device:
                 found_devices = []
                 if it8811_device:
                     found_devices.append("IT8811")
@@ -236,6 +259,10 @@ class AutoTestTool:
                     found_devices.append("DMM6500")
                     # 自动连接DMM6500
                     self.auto_connect_dmm6500()
+                if keysight_34461a_device:
+                    found_devices.append("KEYSIGHT 34461A")
+                    # 自动连接KEYSIGHT 34461A
+                    self.auto_connect_keysight_34461a()
                 msg = f"已自动识别并选择以下设备: {', '.join(found_devices)}"
                 self.log(msg)
         except Exception as e:
@@ -390,6 +417,43 @@ class AutoTestTool:
         thread.daemon = True
         thread.start()
     
+    def auto_connect_keysight_34461a(self):
+        """自动连接KEYSIGHT 34461A"""
+        selected_text = self.keysight_resource.get()
+        if not selected_text:
+            return
+        
+        # 获取实际的设备地址
+        resource = self.device_info.get(selected_text, selected_text)
+        
+        # 显示连接中状态
+        self.keysight_status.config(text="连接中...", foreground="orange")
+        
+        # 创建后台线程执行连接操作
+        def connect_thread():
+            try:
+                # 使用device_controller连接设备
+                success, msg = self.device_controller.connect_keysight_34461a(resource)
+                if success:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
+                    self.root.after(0, lambda: self.keysight_button.config(text="断开", command=self.disconnect_keysight_34461a))
+                    self.root.after(0, lambda: self.log(msg))
+                else:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
+                    self.root.after(0, lambda: self.log(msg, level="ERROR"))
+            except Exception as e:
+                error_msg = f"连接KEYSIGHT 34461A失败: {str(e)}"
+                # 在主线程中更新UI
+                self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
+                self.root.after(0, lambda: self.log(error_msg, level="ERROR"))
+        
+        # 启动后台线程
+        thread = threading.Thread(target=connect_thread)
+        thread.daemon = True
+        thread.start()
+    
     def connect_dmm6500(self):
         """连接DMM6500（非阻塞式）"""
         selected_text = self.dmm6500_resource.get()
@@ -430,6 +494,46 @@ class AutoTestTool:
         thread.daemon = True
         thread.start()
     
+    def connect_keysight_34461a(self):
+        """连接KEYSIGHT 34461A（非阻塞式）"""
+        selected_text = self.keysight_resource.get()
+        if not selected_text:
+            messagebox.showwarning("警告", "请选择KEYSIGHT资源")
+            return
+        
+        # 获取实际的设备地址
+        resource = self.device_info.get(selected_text, selected_text)
+        
+        # 显示连接中状态
+        self.keysight_status.config(text="连接中...", foreground="orange")
+        
+        # 创建后台线程执行连接操作
+        def connect_thread():
+            try:
+                # 使用device_controller连接设备
+                success, msg = self.device_controller.connect_keysight_34461a(resource)
+                if success:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
+                    self.root.after(0, lambda: self.keysight_button.config(text="断开", command=self.disconnect_keysight_34461a))
+                    self.root.after(0, lambda: self.log(msg))
+                else:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
+                    self.root.after(0, lambda: messagebox.showerror("错误", msg))
+                    self.root.after(0, lambda: self.log(msg, level="ERROR"))
+            except Exception as e:
+                error_msg = f"连接KEYSIGHT 34461A失败: {str(e)}"
+                # 在主线程中更新UI
+                self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
+                self.root.after(0, lambda: messagebox.showerror("错误", error_msg))
+                self.root.after(0, lambda: self.log(error_msg, level="ERROR"))
+        
+        # 启动后台线程
+        thread = threading.Thread(target=connect_thread)
+        thread.daemon = True
+        thread.start()
+    
     def disconnect_dmm6500(self):
         """断开DMM6500连接（非阻塞式）"""
         # 显示断开中状态
@@ -454,6 +558,38 @@ class AutoTestTool:
                 error_msg = f"断开DMM6500连接失败: {str(e)}"
                 # 在主线程中更新UI
                 self.root.after(0, lambda: self.dmm6500_status.config(text="已连接", foreground="green"))
+                self.root.after(0, lambda: messagebox.showerror("错误", error_msg))
+                self.root.after(0, lambda: self.log(error_msg, level="ERROR"))
+        
+        # 启动后台线程
+        thread = threading.Thread(target=disconnect_thread)
+        thread.daemon = True
+        thread.start()
+    
+    def disconnect_keysight_34461a(self):
+        """断开KEYSIGHT 34461A连接（非阻塞式）"""
+        # 显示断开中状态
+        self.keysight_status.config(text="断开中...", foreground="orange")
+        
+        # 创建后台线程执行断开操作
+        def disconnect_thread():
+            try:
+                # 使用device_controller断开连接
+                success, msg = self.device_controller.disconnect_keysight_34461a()
+                if success:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
+                    self.root.after(0, lambda: self.keysight_button.config(text="连接", command=self.connect_keysight_34461a))
+                    self.root.after(0, lambda: self.log(msg))
+                else:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
+                    self.root.after(0, lambda: messagebox.showerror("错误", msg))
+                    self.root.after(0, lambda: self.log(msg, level="ERROR"))
+            except Exception as e:
+                error_msg = f"断开KEYSIGHT 34461A连接失败: {str(e)}"
+                # 在主线程中更新UI
+                self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
                 self.root.after(0, lambda: messagebox.showerror("错误", error_msg))
                 self.root.after(0, lambda: self.log(error_msg, level="ERROR"))
         
@@ -611,8 +747,34 @@ class AutoTestTool:
                     # 如果电压值格式不正确，保持原样
                     pass
                 
+                # 获取KEYSIGHT 34461A的电流数据
+                curr_success, current = self.device_controller.get_current()
+                if not curr_success:
+                    current = ""
+                    self.root.after(0, lambda: self.log(f"获取电流值失败: {current}", level="WARNING"))
+                else:
+                    # 格式化电流值，从A转换为uA（乘以1,000,000），保持原有精度
+                    try:
+                        current_value = float(current)
+                        # 从A转换为uA
+                        current_value_uA = current_value * 1000000
+                        # 保持原有精度，使用与原始值相同的小数位数
+                        current_str = str(current)
+                        if 'E' in current_str:
+                            # 科学计数法，保持精度
+                            formatted_current = f"{current_value_uA:.6f}"
+                        else:
+                            # 普通格式，保持精度
+                            decimal_places = len(current_str.split('.')[1]) if '.' in current_str else 0
+                            format_str = f"{{:.{decimal_places}f}}"
+                            formatted_current = format_str.format(current_value_uA)
+                        current = formatted_current
+                    except ValueError:
+                        # 如果电流值格式不正确，保持原样
+                        pass
+                
                 # 记录数据
-                success, msg = self.data_manager.record_data(resistance, voltage)
+                success, msg = self.data_manager.record_data(resistance, voltage, current)
                 if success:
                     # 更新表格
                     col_count = msg
@@ -629,8 +791,13 @@ class AutoTestTool:
                         # 插入数据
                         self.tree.set(self.tree.get_children()[0], col_name, resistance)
                         self.tree.set(self.tree.get_children()[1], col_name, voltage)
+                        if len(self.tree.get_children()) > 2:
+                            self.tree.set(self.tree.get_children()[2], col_name, current)
                         
-                        self.log(f"数据采集成功: 电阻={resistance}Ω, 电压={voltage}V")
+                        log_message = f"数据采集成功: 电阻={resistance}Ω, 电压={voltage}V"
+                        if current:
+                            log_message += f", 电流={current}A"
+                        self.log(log_message)
                     
                     self.root.after(0, update_tree)
                 else:

@@ -27,6 +27,7 @@ class DataManager:
             self.excel_sheet.cell(row=1, column=1, value="设备")
             self.excel_sheet.cell(row=2, column=1, value="IT8811 (电阻)")
             self.excel_sheet.cell(row=3, column=1, value="DMM6500 (电压)")
+            self.excel_sheet.cell(row=4, column=1, value="KEYSIGHT 34461A (电流)")
             
             # 生成文件名
             self.excel_filename = f"test_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -50,7 +51,7 @@ class DataManager:
         except Exception as e:
             return False, f"初始化Excel失败: {str(e)}"
     
-    def record_data(self, resistance, voltage):
+    def record_data(self, resistance, voltage, current=None):
         """记录数据"""
         try:
             # 第一次点击时初始化Excel
@@ -63,12 +64,14 @@ class DataManager:
             self.column_count += 1
             
             # 保存到数据列表
-            if len(self.data) < 2:
+            if len(self.data) < 3:
                 self.data.append([])  # IT8811数据
                 self.data.append([])  # DMM6500数据
+                self.data.append([])  # KEYSIGHT 34461A数据
             
             self.data[0].append(resistance)
             self.data[1].append(voltage)
+            self.data[2].append(current if current else "")
             
             # 实时写入Excel
             if self.excel_workbook and self.excel_sheet:
@@ -79,6 +82,7 @@ class DataManager:
                     # 写入数据
                     self.excel_sheet.cell(row=2, column=self.column_count + 1, value=resistance)
                     self.excel_sheet.cell(row=3, column=self.column_count + 1, value=voltage)
+                    self.excel_sheet.cell(row=4, column=self.column_count + 1, value=current if current else "")
                     
                     # 保存Excel文件
                     self.excel_workbook.save(self.excel_filename)
@@ -112,6 +116,10 @@ class DataManager:
                 # 写入DMM6500数据
                 row2 = ['DMM6500 (电压)'] + self.data[1]
                 writer.writerow(row2)
+                
+                # 写入KEYSIGHT 34461A数据
+                row3 = ['KEYSIGHT 34461A (电流)'] + (self.data[2] if len(self.data) > 2 else [])
+                writer.writerow(row3)
             
             return True, f"数据已保存到 {filename}"
         except Exception as e:
