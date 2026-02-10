@@ -223,18 +223,13 @@ class AutoTestTool:
         tree_frame = ttk.Frame(data_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 创建垂直滚动条
-        vscrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL)
-        vscrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
         # 创建水平滚动条
         hscrollbar = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL)
         hscrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         
-        # 创建表格，关联滚动条
-        self.tree = ttk.Treeview(tree_frame, yscrollcommand=vscrollbar.set, xscrollcommand=hscrollbar.set)
+        # 创建表格，关联滚动条，并设置高度
+        self.tree = ttk.Treeview(tree_frame, xscrollcommand=hscrollbar.set, height=3)
         # 配置滚动条
-        vscrollbar.config(command=self.tree.yview)
         hscrollbar.config(command=self.tree.xview)
         
         self.tree["columns"] = ("col1", "col2")
@@ -251,8 +246,8 @@ class AutoTestTool:
         self.tree.insert("", tk.END, text="DMM6500 (电压)")
         self.tree.insert("", tk.END, text="KEYSIGHT 34461A (电流)")
         
-        # 调整表格高度，只显示4行
-        self.tree.pack(fill=tk.BOTH, expand=True, height=4)
+        # 打包表格
+        self.tree.pack(fill=tk.BOTH, expand=True)
     
     def scan_devices(self):
         """扫描可用的VISA设备"""

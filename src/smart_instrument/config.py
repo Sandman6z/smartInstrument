@@ -13,7 +13,7 @@ class Config:
     
     # GUI配置
     WINDOW_TITLE = "自动化测试工具"
-    WINDOW_GEOMETRY = "1000x700"  # 窗口大小
+    WINDOW_GEOMETRY = "1000x600"  # 窗口大小，减少纵向尺寸
     
     # 日志配置
     LOG_ENABLED = True
