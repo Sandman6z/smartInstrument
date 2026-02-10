@@ -30,6 +30,9 @@ class AutoTestTool:
         self.root.title(Config.WINDOW_TITLE)
         self.root.geometry(Config.WINDOW_GEOMETRY)
         
+        # 绑定关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
         # 初始化控制器
         self.device_controller = DeviceController()
         self.data_manager = DataManager()
@@ -50,6 +53,19 @@ class AutoTestTool:
         self.scan_devices()
     
     def create_widgets(self):
+        # 创建菜单栏
+        menubar = tk.Menu(self.root)
+        
+        # 文件菜单
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="保存数据到CSV", command=self.save_to_csv)
+        file_menu.add_separator()
+        file_menu.add_command(label="退出", command=self.on_closing)
+        menubar.add_cascade(label="文件", menu=file_menu)
+        
+        # 设置菜单栏
+        self.root.config(menu=menubar)
+        
         # 主框架
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -109,6 +125,24 @@ class AutoTestTool:
         self.resistance_entry = ttk.Entry(resistance_frame, width=15)
         self.resistance_entry.pack(side=tk.LEFT, padx=5)
         self.resistance_entry.insert(0, "7500")  # 默认值7500Ω
+        
+        # 添加输入框事件处理
+        # 当输入框内容变化时，更新滑动条位置
+        def on_resistance_entry_change(event):
+            try:
+                resistance = float(self.resistance_entry.get())
+                if 10 <= resistance <= 7500:
+                    self.resistance_var.set(resistance)
+            except ValueError:
+                pass
+        
+        # 当按下回车键时，设置电阻值
+        def on_resistance_entry_return(event):
+            self.set_resistance()
+        
+        # 绑定事件
+        self.resistance_entry.bind("<KeyRelease>", on_resistance_entry_change)
+        self.resistance_entry.bind("<Return>", on_resistance_entry_return)
         
         # 添加滑动条
         self.resistance_var = tk.DoubleVar(value=7500)  # 默认值设置为7500
@@ -182,14 +216,31 @@ class AutoTestTool:
         
         # 数据显示
         data_frame = ttk.LabelFrame(main_frame, text="数据记录", padding="10")
-        data_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        # 调整pack参数，不使用expand=True，限制表格高度
+        data_frame.pack(fill=tk.X, pady=5, ipady=5)
         
-        # 创建表格
-        self.tree = ttk.Treeview(data_frame)
+        # 创建表格和滚动条的容器
+        tree_frame = ttk.Frame(data_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建垂直滚动条
+        vscrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL)
+        vscrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 创建水平滚动条
+        hscrollbar = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL)
+        hscrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # 创建表格，关联滚动条
+        self.tree = ttk.Treeview(tree_frame, yscrollcommand=vscrollbar.set, xscrollcommand=hscrollbar.set)
+        # 配置滚动条
+        vscrollbar.config(command=self.tree.yview)
+        hscrollbar.config(command=self.tree.xview)
+        
         self.tree["columns"] = ("col1", "col2")
-        self.tree.column("#0", width=100, minwidth=50, stretch=tk.NO)
-        self.tree.column("col1", width=150, minwidth=100, stretch=tk.YES)
-        self.tree.column("col2", width=150, minwidth=100, stretch=tk.YES)
+        self.tree.column("#0", width=150, minwidth=120, stretch=tk.NO)
+        self.tree.column("col1", width=180, minwidth=150, stretch=tk.YES)
+        self.tree.column("col2", width=180, minwidth=150, stretch=tk.YES)
         
         self.tree.heading("#0", text="设备")
         self.tree.heading("col1", text="触发1")
@@ -200,13 +251,8 @@ class AutoTestTool:
         self.tree.insert("", tk.END, text="DMM6500 (电压)")
         self.tree.insert("", tk.END, text="KEYSIGHT 34461A (电流)")
         
-        self.tree.pack(fill=tk.BOTH, expand=True)
-        
-        # 保存按钮
-        save_frame = ttk.Frame(main_frame)
-        save_frame.pack(fill=tk.X, pady=5)
-        
-        ttk.Button(save_frame, text="保存数据到CSV", command=self.save_to_csv).pack(side=tk.LEFT, padx=5)
+        # 调整表格高度，只显示4行
+        self.tree.pack(fill=tk.BOTH, expand=True, height=4)
     
     def scan_devices(self):
         """扫描可用的VISA设备"""
@@ -888,6 +934,31 @@ class AutoTestTool:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
         print(log_entry)
+    
+    def on_closing(self):
+        """关闭窗口前的处理"""
+        # 检查是否有数据需要保存
+        if self.data_manager.data:
+            # 显示确认对话框
+            result = messagebox.askyesnocancel(
+                "保存数据",
+                "是否保存表格数据到CSV文件？",
+                icon=messagebox.QUESTION
+            )
+            
+            if result is None:
+                # 取消关闭
+                return
+            elif result:
+                # 保存数据
+                success, msg = self.data_manager.save_to_csv()
+                if success:
+                    self.log(msg)
+                else:
+                    self.log(msg, level="ERROR")
+        
+        # 关闭窗口
+        self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
