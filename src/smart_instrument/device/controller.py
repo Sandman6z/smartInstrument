@@ -15,7 +15,7 @@ class DeviceController:
         self.keysight_34461a_connected = False
     
     def scan_devices(self):
-        """扫描可用的VISA设备"""
+        """扫描可用的VISA设备，优先识别LAN连接的设备"""
         try:
             resources = self.rm.list_resources()
             
@@ -23,10 +23,13 @@ class DeviceController:
             device_info = {}
             device_list = []
             
-            # 存储找到的设备
-            it8811_device = None
-            dmm6500_device = None
-            keysight_34461a_device = None
+            # 存储找到的设备，按连接类型分类
+            it8811_lan_device = None
+            it8811_usb_device = None
+            dmm6500_lan_device = None
+            dmm6500_usb_device = None
+            keysight_34461a_lan_device = None
+            keysight_34461a_usb_device = None
             
             # 获取每个设备的IDN信息
             for resource in resources:
@@ -60,43 +63,69 @@ class DeviceController:
                         if len(idn_parts) >= 2:
                             manufacturer = idn_parts[0].strip()
                             model = idn_parts[1].strip()
-                            # 构建更清晰的显示文本
-                            display_text = f"{manufacturer} {model} ({resource})"
+                            # 构建更清晰的显示文本，包含连接类型
+                            connection_type = "LAN" if "TCPIP" in resource else "USB"
+                            display_text = f"{manufacturer} {model} ({connection_type}: {resource.split('::')[0]})"
                             
-                            # 识别IT8811、DMM6500和KEYSIGHT 34461A设备
-                            print(f"  制造商: {manufacturer}, 型号: {model}")
+                            # 识别IT8811、DMM6500和KEYSIGHT 34461A设备，并按连接类型分类
+                            print(f"  制造商: {manufacturer}, 型号: {model}, 连接类型: {connection_type}")
                             if "IT8811" in model or "IT8811" in idn:
                                 print(f"  识别为IT8811设备")
-                                it8811_device = display_text
+                                if "TCPIP" in resource:
+                                    it8811_lan_device = display_text
+                                else:
+                                    it8811_usb_device = display_text
                             elif "DMM6500" in model or "DMM6500" in idn:
                                 print(f"  识别为DMM6500设备")
-                                dmm6500_device = display_text
+                                if "TCPIP" in resource:
+                                    dmm6500_lan_device = display_text
+                                else:
+                                    dmm6500_usb_device = display_text
                             elif "34461A" in model or "34461A" in idn:
                                 print(f"  识别为KEYSIGHT 34461A设备")
-                                keysight_34461a_device = display_text
+                                if "TCPIP" in resource:
+                                    keysight_34461a_lan_device = display_text
+                                else:
+                                    keysight_34461a_usb_device = display_text
                         else:
                             # 如果IDN格式不正确，使用原始IDN
-                            display_text = f"{idn} ({resource})"
+                            connection_type = "LAN" if "TCPIP" in resource else "USB"
+                            display_text = f"{idn} ({connection_type}: {resource.split('::')[0]})"
                         
                         device_list.append(display_text)
                         device_info[display_text] = resource
                         print(f"设备信息: {display_text}")
                     else:
                         # 如果无法获取IDN，只显示地址
+                        connection_type = "LAN" if "TCPIP" in resource else "USB"
                         print(f"无法获取设备IDN，只显示地址: {resource}")
-                        device_list.append(resource)
-                        device_info[resource] = resource
+                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                        device_list.append(display_text)
+                        device_info[display_text] = resource
                 except Exception as e:
                     # 如果无法获取IDN，只显示地址
+                    connection_type = "LAN" if "TCPIP" in resource else "USB"
                     print(f"获取设备IDN失败 {resource}: {str(e)}")
-                    device_list.append(resource)
-                    device_info[resource] = resource
+                    display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                    device_list.append(display_text)
+                    device_info[display_text] = resource
+            
+            # 优先选择LAN连接的设备
+            it8811_device = it8811_lan_device or it8811_usb_device
+            dmm6500_device = dmm6500_lan_device or dmm6500_usb_device
+            keysight_34461a_device = keysight_34461a_lan_device or keysight_34461a_usb_device
             
             print(f"扫描完成，找到设备数量: {len(device_list)}")
             print(f"找到的设备: {device_list}")
-            print(f"识别到的IT8811: {it8811_device}")
-            print(f"识别到的DMM6500: {dmm6500_device}")
-            print(f"识别到的KEYSIGHT 34461A: {keysight_34461a_device}")
+            print(f"识别到的IT8811 (LAN): {it8811_lan_device}")
+            print(f"识别到的IT8811 (USB): {it8811_usb_device}")
+            print(f"识别到的DMM6500 (LAN): {dmm6500_lan_device}")
+            print(f"识别到的DMM6500 (USB): {dmm6500_usb_device}")
+            print(f"识别到的KEYSIGHT 34461A (LAN): {keysight_34461a_lan_device}")
+            print(f"识别到的KEYSIGHT 34461A (USB): {keysight_34461a_usb_device}")
+            print(f"最终选择的IT8811: {it8811_device}")
+            print(f"最终选择的DMM6500: {dmm6500_device}")
+            print(f"最终选择的KEYSIGHT 34461A: {keysight_34461a_device}")
             
             return device_list, device_info, it8811_device, dmm6500_device, keysight_34461a_device
         except Exception as e:
@@ -177,7 +206,7 @@ class DeviceController:
             return False, f"断开IT8811连接失败: {str(e)}"
     
     def connect_dmm6500(self, resource):
-        """连接DMM6500"""
+        """连接DMM6500，优先使用LAN连接"""
         try:
             # 设置连接超时
             self.dmm6500 = self.rm.open_resource(resource)
@@ -194,7 +223,8 @@ class DeviceController:
                 print("DMM6500设置为DCV模式")
                 
                 self.dmm6500_connected = True
-                return True, "DMM6500连接成功并设置为DCV模式"
+                connection_type = "LAN" if "TCPIP" in resource else "USB"
+                return True, f"DMM6500连接成功({connection_type})并设置为DCV模式"
             except pyvisa.errors.VisaIOError as e:
                 if "timeout" in str(e).lower():
                     return False, "连接DMM6500超时，请检查设备连接"
@@ -215,7 +245,7 @@ class DeviceController:
             return False, f"断开DMM6500连接失败: {str(e)}"
     
     def connect_keysight_34461a(self, resource):
-        """连接KEYSIGHT 34461A并设置为DCI模式"""
+        """连接KEYSIGHT 34461A并设置为DCI模式，优先使用LAN连接"""
         try:
             # 设置连接超时
             self.keysight_34461a = self.rm.open_resource(resource)
@@ -232,7 +262,8 @@ class DeviceController:
                 print("KEYSIGHT 34461A设置为DCI模式")
                 
                 self.keysight_34461a_connected = True
-                return True, "KEYSIGHT 34461A连接成功并设置为DCI模式"
+                connection_type = "LAN" if "TCPIP" in resource else "USB"
+                return True, f"KEYSIGHT 34461A连接成功({connection_type})并设置为DCI模式"
             except pyvisa.errors.VisaIOError as e:
                 if "timeout" in str(e).lower():
                     return False, "连接KEYSIGHT 34461A超时，请检查设备连接"
