@@ -248,6 +248,18 @@ class AutoTestTool:
         
         # 打包表格
         self.tree.pack(fill=tk.BOTH, expand=True)
+        
+        # 添加清除测试数据按钮
+        clear_frame = ttk.Frame(data_frame)
+        clear_frame.pack(fill=tk.X, pady=5)
+        
+        self.clear_data_button = ttk.Button(
+            clear_frame, 
+            text="清除测试数据", 
+            command=self.confirm_clear_data,
+            style="TButton"
+        )
+        self.clear_data_button.pack(side=tk.RIGHT, padx=5)
     
     def scan_devices(self):
         """扫描可用的VISA设备"""
@@ -929,6 +941,49 @@ class AutoTestTool:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
         print(log_entry)
+    
+    def confirm_clear_data(self):
+        """确认清除测试数据"""
+        # 检查是否有数据需要清除
+        if not self.data_manager.data:
+            messagebox.showinfo("提示", "表格中没有数据可清除")
+            return
+        
+        # 显示确认对话框
+        result = messagebox.askyesno(
+            "确认清除",
+            "确定要清除所有测试数据吗？此操作不可撤销。",
+            icon=messagebox.WARNING
+        )
+        
+        if result:
+            # 用户确认，执行清除操作
+            self.clear_test_data()
+    
+    def clear_test_data(self):
+        """清除测试数据"""
+        try:
+            # 调用DataManager的clear_data方法清空数据
+            success, msg = self.data_manager.clear_data()
+            if success:
+                # 重置表格结构
+                # 清除所有设备行的数据
+                for item in self.tree.get_children():
+                    # 清除所有列的数据
+                    columns = list(self.tree["columns"])
+                    for col in columns:
+                        self.tree.set(item, col, "")
+                
+                # 显示成功消息
+                messagebox.showinfo("成功", msg)
+                self.log(msg)
+            else:
+                messagebox.showerror("错误", msg)
+                self.log(msg, level="ERROR")
+        except Exception as e:
+            error_msg = f"清除测试数据失败: {str(e)}"
+            messagebox.showerror("错误", error_msg)
+            self.log(error_msg, level="ERROR")
     
     def on_closing(self):
         """关闭窗口前的处理"""
