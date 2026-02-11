@@ -11,11 +11,13 @@ if __name__ == "__main__":
     from smart_instrument.device.controller import DeviceController
     from smart_instrument.data.manager import DataManager
     from smart_instrument.config import Config
+    from smart_instrument.gui.components import AutoScrollCombobox
 else:
     # 作为模块导入时，使用相对导入
     from .device.controller import DeviceController
     from .data.manager import DataManager
     from .config import Config
+    from .gui.components import AutoScrollCombobox
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
@@ -79,7 +81,7 @@ class AutoTestTool:
         it8811_frame.pack(fill=tk.X, pady=5)
         
         ttk.Label(it8811_frame, text="IT8811资源:", width=15).pack(side=tk.LEFT, padx=5)
-        self.it8811_resource = ttk.Combobox(it8811_frame, width=30)
+        self.it8811_resource = AutoScrollCombobox(it8811_frame, width=30)
         self.it8811_resource.pack(side=tk.LEFT, padx=5)
         
         self.it8811_button = ttk.Button(it8811_frame, text="连接", command=self.connect_it8811)
@@ -92,7 +94,7 @@ class AutoTestTool:
         dmm6500_frame.pack(fill=tk.X, pady=5)
         
         ttk.Label(dmm6500_frame, text="DMM6500资源:", width=15).pack(side=tk.LEFT, padx=5)
-        self.dmm6500_resource = ttk.Combobox(dmm6500_frame, width=30)
+        self.dmm6500_resource = AutoScrollCombobox(dmm6500_frame, width=30)
         self.dmm6500_resource.pack(side=tk.LEFT, padx=5)
         
         self.dmm6500_button = ttk.Button(dmm6500_frame, text="连接", command=self.connect_dmm6500)
@@ -105,7 +107,7 @@ class AutoTestTool:
         keysight_frame.pack(fill=tk.X, pady=5)
         
         ttk.Label(keysight_frame, text="KEYSIGHT资源:", width=15).pack(side=tk.LEFT, padx=5)
-        self.keysight_resource = ttk.Combobox(keysight_frame, width=30)
+        self.keysight_resource = AutoScrollCombobox(keysight_frame, width=30)
         self.keysight_resource.pack(side=tk.LEFT, padx=5)
         
         self.keysight_button = ttk.Button(keysight_frame, text="连接", command=self.connect_keysight_34461a)
