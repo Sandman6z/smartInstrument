@@ -31,6 +31,10 @@ class DeviceController:
             keysight_34461a_lan_device = None
             keysight_34461a_usb_device = None
             
+            # 用于去重的集合
+            seen_devices = set()
+            unknown_usb_count = 0
+            
             # 获取每个设备的IDN信息
             for resource in resources:
                 print(f"开始扫描设备: {resource}")
@@ -67,48 +71,94 @@ class DeviceController:
                             connection_type = "LAN" if "TCPIP" in resource else "USB"
                             display_text = f"{manufacturer} {model} ({connection_type}: {resource.split('::')[0]})"
                             
-                            # 识别IT8811、DMM6500和KEYSIGHT 34461A设备，并按连接类型分类
-                            print(f"  制造商: {manufacturer}, 型号: {model}, 连接类型: {connection_type}")
-                            if "IT8811" in model or "IT8811" in idn:
-                                print(f"  识别为IT8811设备")
-                                if "TCPIP" in resource:
-                                    it8811_lan_device = display_text
-                                else:
-                                    it8811_usb_device = display_text
-                            elif "DMM6500" in model or "DMM6500" in idn:
-                                print(f"  识别为DMM6500设备")
-                                if "TCPIP" in resource:
-                                    dmm6500_lan_device = display_text
-                                else:
-                                    dmm6500_usb_device = display_text
-                            elif "34461A" in model or "34461A" in idn:
-                                print(f"  识别为KEYSIGHT 34461A设备")
-                                if "TCPIP" in resource:
-                                    keysight_34461a_lan_device = display_text
-                                else:
-                                    keysight_34461a_usb_device = display_text
+                            # 生成设备唯一标识（基于制造商和型号）
+                            device_key = f"{manufacturer}_{model}"
+                            
+                            # 检查是否已添加过相同的设备
+                            if device_key not in seen_devices:
+                                seen_devices.add(device_key)
+                                
+                                # 识别IT8811、DMM6500和KEYSIGHT 34461A设备，并按连接类型分类
+                                print(f"  制造商: {manufacturer}, 型号: {model}, 连接类型: {connection_type}")
+                                if "IT8811" in model or "IT8811" in idn:
+                                    print(f"  识别为IT8811设备")
+                                    if "TCPIP" in resource:
+                                        it8811_lan_device = display_text
+                                    else:
+                                        it8811_usb_device = display_text
+                                elif "DMM6500" in model or "DMM6500" in idn:
+                                    print(f"  识别为DMM6500设备")
+                                    if "TCPIP" in resource:
+                                        dmm6500_lan_device = display_text
+                                    else:
+                                        dmm6500_usb_device = display_text
+                                elif "34461A" in model or "34461A" in idn:
+                                    print(f"  识别为KEYSIGHT 34461A设备")
+                                    if "TCPIP" in resource:
+                                        keysight_34461a_lan_device = display_text
+                                    else:
+                                        keysight_34461a_usb_device = display_text
+                                
+                                device_list.append(display_text)
+                                device_info[display_text] = resource
+                                print(f"设备信息: {display_text}")
+                            else:
+                                print(f"  设备已存在，跳过重复项: {display_text}")
                         else:
                             # 如果IDN格式不正确，使用原始IDN
                             connection_type = "LAN" if "TCPIP" in resource else "USB"
                             display_text = f"{idn} ({connection_type}: {resource.split('::')[0]})"
-                        
-                        device_list.append(display_text)
-                        device_info[display_text] = resource
-                        print(f"设备信息: {display_text}")
+                            
+                            # 生成设备唯一标识
+                            device_key = f"IDN_{idn}"
+                            if device_key not in seen_devices:
+                                seen_devices.add(device_key)
+                                device_list.append(display_text)
+                                device_info[display_text] = resource
+                                print(f"设备信息: {display_text}")
+                            else:
+                                print(f"  设备已存在，跳过重复项: {display_text}")
                     else:
                         # 如果无法获取IDN，只显示地址
                         connection_type = "LAN" if "TCPIP" in resource else "USB"
                         print(f"无法获取设备IDN，只显示地址: {resource}")
-                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
-                        device_list.append(display_text)
-                        device_info[display_text] = resource
+                        
+                        # 对于USB设备，限制未知设备的数量
+                        if connection_type == "USB":
+                            unknown_usb_count += 1
+                            if unknown_usb_count > 1:
+                                print(f"  跳过重复的未知USB设备")
+                                continue
+                            display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                        else:
+                            # 对于LAN设备，使用完整地址作为标识
+                            display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                        
+                        device_key = f"UNKNOWN_{resource}"
+                        if device_key not in seen_devices:
+                            seen_devices.add(device_key)
+                            device_list.append(display_text)
+                            device_info[display_text] = resource
                 except Exception as e:
                     # 如果无法获取IDN，只显示地址
                     connection_type = "LAN" if "TCPIP" in resource else "USB"
                     print(f"获取设备IDN失败 {resource}: {str(e)}")
-                    display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
-                    device_list.append(display_text)
-                    device_info[display_text] = resource
+                    
+                    # 对于USB设备，限制未知设备的数量
+                    if connection_type == "USB":
+                        unknown_usb_count += 1
+                        if unknown_usb_count > 1:
+                            print(f"  跳过重复的未知USB设备")
+                            continue
+                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                    else:
+                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                    
+                    device_key = f"ERROR_{resource}"
+                    if device_key not in seen_devices:
+                        seen_devices.add(device_key)
+                        device_list.append(display_text)
+                        device_info[display_text] = resource
             
             # 优先选择LAN连接的设备
             it8811_device = it8811_lan_device or it8811_usb_device
@@ -188,10 +238,34 @@ class DeviceController:
                 return True, "IT8811连接成功并切换到CR模式"
             except pyvisa.errors.VisaIOError as e:
                 if "timeout" in str(e).lower():
+                    # 连接超时，清理资源并更新连接状态
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    self.it8811_connected = False
                     return False, "连接IT8811超时，请检查设备连接"
                 else:
+                    # 其他VISA错误，清理资源并更新连接状态
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    self.it8811_connected = False
                     return False, f"连接IT8811失败: {str(e)}"
         except Exception as e:
+            # 通用错误，清理资源并更新连接状态
+            if self.it8811:
+                try:
+                    self.it8811.close()
+                except:
+                    pass
+                self.it8811 = None
+            self.it8811_connected = False
             return False, f"连接IT8811失败: {str(e)}"
     
     def disconnect_it8811(self):
@@ -227,10 +301,34 @@ class DeviceController:
                 return True, f"DMM6500连接成功({connection_type})并设置为DCV模式"
             except pyvisa.errors.VisaIOError as e:
                 if "timeout" in str(e).lower():
+                    # 连接超时，清理资源并更新连接状态
+                    if self.dmm6500:
+                        try:
+                            self.dmm6500.close()
+                        except:
+                            pass
+                        self.dmm6500 = None
+                    self.dmm6500_connected = False
                     return False, "连接DMM6500超时，请检查设备连接"
                 else:
+                    # 其他VISA错误，清理资源并更新连接状态
+                    if self.dmm6500:
+                        try:
+                            self.dmm6500.close()
+                        except:
+                            pass
+                        self.dmm6500 = None
+                    self.dmm6500_connected = False
                     return False, f"连接DMM6500失败: {str(e)}"
         except Exception as e:
+            # 通用错误，清理资源并更新连接状态
+            if self.dmm6500:
+                try:
+                    self.dmm6500.close()
+                except:
+                    pass
+                self.dmm6500 = None
+            self.dmm6500_connected = False
             return False, f"连接DMM6500失败: {str(e)}"
     
     def disconnect_dmm6500(self):
@@ -266,10 +364,34 @@ class DeviceController:
                 return True, f"KEYSIGHT 34461A连接成功({connection_type})并设置为DCI模式"
             except pyvisa.errors.VisaIOError as e:
                 if "timeout" in str(e).lower():
+                    # 连接超时，清理资源并更新连接状态
+                    if self.keysight_34461a:
+                        try:
+                            self.keysight_34461a.close()
+                        except:
+                            pass
+                        self.keysight_34461a = None
+                    self.keysight_34461a_connected = False
                     return False, "连接KEYSIGHT 34461A超时，请检查设备连接"
                 else:
+                    # 其他VISA错误，清理资源并更新连接状态
+                    if self.keysight_34461a:
+                        try:
+                            self.keysight_34461a.close()
+                        except:
+                            pass
+                        self.keysight_34461a = None
+                    self.keysight_34461a_connected = False
                     return False, f"连接KEYSIGHT 34461A失败: {str(e)}"
         except Exception as e:
+            # 通用错误，清理资源并更新连接状态
+            if self.keysight_34461a:
+                try:
+                    self.keysight_34461a.close()
+                except:
+                    pass
+                self.keysight_34461a = None
+            self.keysight_34461a_connected = False
             return False, f"连接KEYSIGHT 34461A失败: {str(e)}"
     
     def disconnect_keysight_34461a(self):
@@ -297,12 +419,39 @@ class DeviceController:
                     current = self.keysight_34461a.read().strip()
                     print(f"获取电流值成功: {current}")
                     return True, current
+                except pyvisa.errors.VisaIOError as e:
+                    print(f"测量命令 {cmd} 失败: {str(e)}")
+                    # 检查是否超时错误
+                    if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                        # 操作超时或会话无效，清理资源并更新连接状态
+                        if self.keysight_34461a:
+                            try:
+                                self.keysight_34461a.close()
+                            except:
+                                pass
+                            self.keysight_34461a = None
+                        self.keysight_34461a_connected = False
+                        return False, "设备连接已断开，请重新连接"
+                    continue
                 except Exception as e:
                     print(f"测量命令 {cmd} 失败: {str(e)}")
                     continue
             
             # 所有命令都失败
             return False, "所有测量命令都失败"
+        except pyvisa.errors.VisaIOError as e:
+            print(f"获取电流值失败: {str(e)}")
+            # 操作超时或会话无效，清理资源并更新连接状态
+            if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                if self.keysight_34461a:
+                    try:
+                        self.keysight_34461a.close()
+                    except:
+                        pass
+                    self.keysight_34461a = None
+                self.keysight_34461a_connected = False
+                return False, "设备连接已断开，请重新连接"
+            return False, f"获取电流值失败: {str(e)}"
         except Exception as e:
             return False, f"获取电流值失败: {str(e)}"
     
@@ -312,10 +461,58 @@ class DeviceController:
             return False, "请先连接IT8811"
         
         try:
-            # 设置电阻值
-            self.it8811.write(f"RES {resistance}")
-            return True, f"电阻值设置为 {resistance} Ω"
+            # 保存原始超时时间
+            original_timeout = self.it8811.timeout
+            # 增加超时时间到10秒
+            self.it8811.timeout = 10000
+            
+            # 尝试多次设置电阻值
+            max_retries = 3
+            for retry in range(max_retries):
+                try:
+                    # 设置电阻值
+                    self.it8811.write(f"RES {resistance}")
+                    # 短暂延迟，让设备有时间处理命令
+                    time.sleep(0.5)
+                    # 验证设置是否成功
+                    try:
+                        self.it8811.write("RES?")
+                        response = self.it8811.read().strip()
+                        print(f"电阻值设置验证: {response} Ω")
+                    except Exception as verify_e:
+                        print(f"验证电阻值失败: {str(verify_e)}")
+                    
+                    # 恢复原始超时时间
+                    self.it8811.timeout = original_timeout
+                    return True, f"电阻值设置为 {resistance} Ω"
+                except pyvisa.errors.VisaIOError as e:
+                    print(f"设置电阻值失败 (尝试 {retry + 1}/{max_retries}): {str(e)}")
+                    if retry < max_retries - 1:
+                        # 短暂延迟后重试
+                        time.sleep(1)
+                        continue
+                    else:
+                        # 所有重试都失败
+                        # 恢复原始超时时间
+                        self.it8811.timeout = original_timeout
+                        # 操作超时或会话无效，清理资源并更新连接状态
+                        if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                            if self.it8811:
+                                try:
+                                    self.it8811.close()
+                                except:
+                                    pass
+                                self.it8811 = None
+                            self.it8811_connected = False
+                            return False, "设备连接已断开，请重新连接"
+                        return False, f"设置电阻值失败: {str(e)}"
         except Exception as e:
+            # 恢复原始超时时间
+            if hasattr(self, 'it8811') and self.it8811:
+                try:
+                    self.it8811.timeout = original_timeout
+                except:
+                    pass
             return False, f"设置电阻值失败: {str(e)}"
     
     def toggle_output(self, state):
@@ -348,9 +545,36 @@ class DeviceController:
                         print(f"   执行模式命令: {mode_cmd}")
                         time.sleep(0.5)
                         break
+                    except pyvisa.errors.VisaIOError as e:
+                        print(f"   模式命令 {mode_cmd} 失败: {str(e)}")
+                        # 检查是否超时错误
+                        if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                            # 操作超时或会话无效，清理资源并更新连接状态
+                            if self.it8811:
+                                try:
+                                    self.it8811.close()
+                                except:
+                                    pass
+                                self.it8811 = None
+                            self.it8811_connected = False
+                            return False, "设备连接已断开，请重新连接"
+                        continue
                     except Exception as e:
                         print(f"   模式命令 {mode_cmd} 失败: {str(e)}")
                         continue
+            except pyvisa.errors.VisaIOError as e:
+                print(f"设置CR模式失败: {str(e)}")
+                # 检查是否超时错误
+                if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                    # 操作超时或会话无效，清理资源并更新连接状态
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    self.it8811_connected = False
+                    return False, "设备连接已断开，请重新连接"
             except Exception as e:
                 print(f"设置CR模式失败: {str(e)}")
             
@@ -364,6 +588,20 @@ class DeviceController:
                     time.sleep(0.5)
                     command_success = True
                     break
+                except pyvisa.errors.VisaIOError as e:
+                    print(f"   命令 {cmd} 失败: {str(e)}")
+                    # 检查是否超时错误
+                    if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                        # 操作超时或会话无效，清理资源并更新连接状态
+                        if self.it8811:
+                            try:
+                                self.it8811.close()
+                            except:
+                                pass
+                            self.it8811 = None
+                        self.it8811_connected = False
+                        return False, "设备连接已断开，请重新连接"
+                    continue
                 except Exception as e:
                     print(f"   命令 {cmd} 失败: {str(e)}")
                     continue
@@ -379,6 +617,19 @@ class DeviceController:
                 time.sleep(0.3)
                 idn = self.it8811.read().strip()
                 print(f"   设备IDN: {idn}")
+            except pyvisa.errors.VisaIOError as e:
+                print(f"读取IDN失败: {str(e)}")
+                # 检查是否超时错误
+                if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                    # 操作超时或会话无效，清理资源并更新连接状态
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    self.it8811_connected = False
+                    return False, "设备连接已断开，请重新连接"
             except Exception as e:
                 print(f"读取IDN失败: {str(e)}")
             
@@ -402,15 +653,56 @@ class DeviceController:
                             return True, expected_msg
                         else:
                             print(f"   状态验证失败，期望: {state}，实际: {output_state}")
+                    except pyvisa.errors.VisaIOError as e:
+                        print(f"   读取状态失败 (命令: {status_cmd}): {str(e)}")
+                        # 检查是否超时错误
+                        if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                            # 操作超时或会话无效，清理资源并更新连接状态
+                            if self.it8811:
+                                try:
+                                    self.it8811.close()
+                                except:
+                                    pass
+                                self.it8811 = None
+                            self.it8811_connected = False
+                            return False, "设备连接已断开，请重新连接"
+                        continue
                     except Exception as e:
                         print(f"   读取状态失败 (命令: {status_cmd}): {str(e)}")
                         continue
+            except pyvisa.errors.VisaIOError as e:
+                print(f"读取输出状态失败: {str(e)}")
+                # 检查是否超时错误
+                if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                    # 操作超时或会话无效，清理资源并更新连接状态
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    self.it8811_connected = False
+                    return False, "设备连接已断开，请重新连接"
             except Exception as e:
                 print(f"读取输出状态失败: {str(e)}")
             
             # 即使验证失败，也返回成功，因为设备可能已经执行了命令
             print("===== 输出状态控制完成（状态验证失败） =====")
             return True, expected_msg
+        except pyvisa.errors.VisaIOError as e:
+            print(f"控制输出失败: {str(e)}")
+            # 检查是否超时错误
+            if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                # 操作超时或会话无效，清理资源并更新连接状态
+                if self.it8811:
+                    try:
+                        self.it8811.close()
+                    except:
+                        pass
+                    self.it8811 = None
+                self.it8811_connected = False
+                return False, "设备连接已断开，请重新连接"
+            return False, f"控制输出失败: {str(e)}"
         except Exception as e:
             print(f"控制输出失败: {str(e)}")
             return False, f"控制输出失败: {str(e)}"
@@ -434,6 +726,20 @@ class DeviceController:
                     self.it8811.timeout = original_timeout  # 恢复默认值
                     print(f"获取电阻值成功: {resistance}")
                     return True, resistance
+                except pyvisa.errors.VisaIOError as e:
+                    print(f"测量命令 {cmd} 失败: {str(e)}")
+                    # 检查是否超时错误
+                    if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                        # 操作超时或会话无效，清理资源并更新连接状态
+                        if self.it8811:
+                            try:
+                                self.it8811.close()
+                            except:
+                                pass
+                            self.it8811 = None
+                        self.it8811_connected = False
+                        return False, "设备连接已断开，请重新连接"
+                    continue
                 except Exception as e:
                     print(f"测量命令 {cmd} 失败: {str(e)}")
                     continue
@@ -441,10 +747,33 @@ class DeviceController:
             # 所有命令都失败
             self.it8811.timeout = original_timeout  # 恢复默认值
             return False, "所有测量命令都失败"
+        except pyvisa.errors.VisaIOError as e:
+            print(f"获取电阻值失败: {str(e)}")
+            # 恢复超时设置
+            if hasattr(self, 'it8811') and self.it8811:
+                try:
+                    self.it8811.timeout = original_timeout
+                except:
+                    pass
+            # 检查是否超时错误
+            if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                # 操作超时或会话无效，清理资源并更新连接状态
+                if self.it8811:
+                    try:
+                        self.it8811.close()
+                    except:
+                        pass
+                    self.it8811 = None
+                self.it8811_connected = False
+                return False, "设备连接已断开，请重新连接"
+            return False, f"获取电阻值失败: {str(e)}"
         except Exception as e:
             # 恢复超时设置
             if hasattr(self, 'it8811') and self.it8811:
-                self.it8811.timeout = original_timeout
+                try:
+                    self.it8811.timeout = original_timeout
+                except:
+                    pass
             return False, f"获取电阻值失败: {str(e)}"
     
     def get_voltage(self):
@@ -456,5 +785,19 @@ class DeviceController:
             self.dmm6500.write("MEAS:VOLT:DC?")
             voltage = self.dmm6500.read().strip()
             return True, voltage
+        except pyvisa.errors.VisaIOError as e:
+            print(f"获取电压值失败: {str(e)}")
+            # 检查是否超时错误
+            if "timeout" in str(e).lower() or "nsup_oper" in str(e).lower():
+                # 操作超时或会话无效，清理资源并更新连接状态
+                if self.dmm6500:
+                    try:
+                        self.dmm6500.close()
+                    except:
+                        pass
+                    self.dmm6500 = None
+                self.dmm6500_connected = False
+                return False, "设备连接已断开，请重新连接"
+            return False, f"获取电压值失败: {str(e)}"
         except Exception as e:
             return False, f"获取电压值失败: {str(e)}"
