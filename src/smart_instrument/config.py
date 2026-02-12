@@ -9,7 +9,7 @@ class Config:
     DMM6500_DEFAULT_MODE = "VOLT:DC"  # 默认测量模式
     
     # 连接配置
-    CONNECTION_TIMEOUT = 5000  # 连接超时时间（毫秒）
+    CONNECTION_TIMEOUT = 3000  # 连接超时时间（毫秒），设置为平衡响应速度和可靠性的中间值
     
     # GUI配置
     WINDOW_TITLE = "自动化测试工具"

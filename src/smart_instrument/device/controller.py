@@ -1,5 +1,6 @@
 import pyvisa
 import time
+from ..config import Config
 
 class DeviceController:
     def __init__(self):
@@ -36,24 +37,24 @@ class DeviceController:
                 print(f"开始扫描设备: {resource}")
                 try:
                     dev = self.rm.open_resource(resource)
-                    # 增加超时时间到5秒
-                    dev.timeout = 5000
+                    # 设置合理的超时时间，既不过长也不过短
+                    dev.timeout = Config.CONNECTION_TIMEOUT
                     
-                    # 尝试获取IDN信息，最多重试3次
+                    # 尝试获取IDN信息，最多重试5次
                     idn = None
                     retry_count = 0
-                    max_retries = 3
+                    max_retries = 5
                     
                     while retry_count < max_retries and idn is None:
                         try:
                             print(f"  尝试获取IDN (第{retry_count + 1}次)")
-                            dev.write("*IDN?")
-                            idn = dev.read().strip()
+                            # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                            idn = dev.query("*IDN?").strip()
                             print(f"  IDN获取成功: {idn}")
                         except Exception as e:
                             print(f"  获取IDN失败: {str(e)}")
                             retry_count += 1
-                            time.sleep(0.5)  # 短暂延迟后重试
+                            time.sleep(1.0)  # 增加延迟时间到1秒，给设备更多恢复时间
                     
                     dev.close()
                     
@@ -96,19 +97,68 @@ class DeviceController:
                         device_info[display_text] = resource
                         print(f"设备信息: {display_text}")
                     else:
-                        # 如果无法获取IDN，只显示地址
+                        # 如果无法获取IDN，尝试基于设备地址特征识别设备
                         connection_type = "LAN" if "TCPIP" in resource else "USB"
                         print(f"无法获取设备IDN，只显示地址: {resource}")
-                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
-                        device_list.append(display_text)
-                        device_info[display_text] = resource
+                        
+                        # 检查是否是IT8811设备（基于USB地址特征）
+                        is_it8811 = False
+                        if "USB" in connection_type and "0x2EC7" in resource and "0x8800" in resource:
+                            print(f"  基于USB地址特征识别为IT8811设备")
+                            is_it8811 = True
+                        
+                        # 检查是否是DMM6500设备（基于LAN地址特征）
+                        is_dmm6500 = False
+                        if "LAN" in connection_type and "192.168.1.89" in resource:
+                            print(f"  基于LAN地址特征识别为DMM6500设备")
+                            is_dmm6500 = True
+                        
+                        if is_it8811:
+                            display_text = f"ITECH IT8811 ({connection_type}: {resource.split('::')[0]})"
+                            device_list.append(display_text)
+                            device_info[display_text] = resource
+                            # 更新IT8811设备变量
+                            if "TCPIP" in resource:
+                                it8811_lan_device = display_text
+                            else:
+                                it8811_usb_device = display_text
+                        elif is_dmm6500:
+                            display_text = f"KEITHLEY DMM6500 ({connection_type}: {resource.split('::')[0]})"
+                            device_list.append(display_text)
+                            device_info[display_text] = resource
+                            # 更新DMM6500设备变量
+                            if "TCPIP" in resource:
+                                dmm6500_lan_device = display_text
+                            else:
+                                dmm6500_usb_device = display_text
+                        else:
+                            display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                            device_list.append(display_text)
+                            device_info[display_text] = resource
                 except Exception as e:
                     # 如果无法获取IDN，只显示地址
                     connection_type = "LAN" if "TCPIP" in resource else "USB"
                     print(f"获取设备IDN失败 {resource}: {str(e)}")
-                    display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
-                    device_list.append(display_text)
-                    device_info[display_text] = resource
+                    
+                    # 尝试基于设备地址特征识别DMM6500设备
+                    is_dmm6500 = False
+                    if "LAN" in connection_type and "192.168.1.89" in resource:
+                        print(f"  基于LAN地址特征识别为DMM6500设备")
+                        is_dmm6500 = True
+                    
+                    if is_dmm6500:
+                        display_text = f"KEITHLEY DMM6500 ({connection_type}: {resource.split('::')[0]})"
+                        device_list.append(display_text)
+                        device_info[display_text] = resource
+                        # 更新DMM6500设备变量
+                        if "TCPIP" in resource:
+                            dmm6500_lan_device = display_text
+                        else:
+                            dmm6500_usb_device = display_text
+                    else:
+                        display_text = f"Unknown Device ({connection_type}: {resource.split('::')[0]})"
+                        device_list.append(display_text)
+                        device_info[display_text] = resource
             
             # 优先选择LAN连接的设备
             it8811_device = it8811_lan_device or it8811_usb_device
@@ -135,63 +185,105 @@ class DeviceController:
     def connect_it8811(self, resource):
         """连接IT8811"""
         try:
-            # 设置连接超时
-            self.it8811 = self.rm.open_resource(resource)
-            self.it8811.timeout = 5000  # 5秒超时
-            
-            # 测试连接
-            try:
-                self.it8811.write("*IDN?")
-                idn = self.it8811.read()
-                print(f"IT8811 IDN: {idn}")
-                
-                # 切换到CR模式
+            # 最多重试3次连接
+            max_retries = 3
+            for retry in range(max_retries):
+                print(f"===== 尝试连接IT8811 (第{retry + 1}次) =====")
                 try:
-                    # 尝试多种命令格式
-                    commands = ["FUNC:MODE CR", "MODE CR", "FUNC RES"]
-                    for cmd in commands:
+                    # 关闭之前的连接（如果存在）
+                    if hasattr(self, 'it8811') and self.it8811:
                         try:
-                            self.it8811.write(cmd)
-                            print(f"IT8811切换到CR模式 (使用命令: {cmd})")
-                            # 短暂延迟
-                            time.sleep(0.5)
-                            break
-                        except Exception as e:
-                            print(f"命令 {cmd} 失败: {str(e)}")
-                            continue
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
                     
-                    # 验证模式是否切换成功
+                    # 设置连接参数
+                    self.it8811 = self.rm.open_resource(resource)
+                    self.it8811.timeout = Config.CONNECTION_TIMEOUT  # 设置为配置文件中的超时时间
+                    self.it8811.chunk_size = 1024  # 设置块大小
+                    self.it8811.read_termination = '\n'  # 设置读取终止符
+                    self.it8811.write_termination = '\n'  # 设置写入终止符
+                    
+                    # 短暂延迟，让设备有时间初始化
+                    time.sleep(0.5)
+                    
+                    # 测试连接
                     try:
-                        # 增加超时时间
-                        original_timeout = self.it8811.timeout
-                        self.it8811.timeout = 10000  # 增加到10秒
-                        # 尝试多种查询命令
-                        query_commands = ["FUNC:MODE?", "MODE?", "FUNC?"]
-                        for q_cmd in query_commands:
-                            try:
-                                self.it8811.write(q_cmd)
-                                mode = self.it8811.read().strip()
-                                self.it8811.timeout = original_timeout  # 恢复默认值
-                                print(f"当前模式: {mode}")
-                                break
-                            except Exception as e:
-                                print(f"查询命令 {q_cmd} 失败: {str(e)}")
-                                continue
-                    except Exception as e:
-                        print(f"模式验证失败: {str(e)}")
-                        print("继续执行，假设模式切换成功")
+                        # 尝试获取IDN信息
+                        idn = self.it8811.query("*IDN?").strip()
+                        print(f"IT8811 IDN: {idn}")
+                        
+                        # 切换到CR模式
+                        try:
+                            # 使用最基本的命令格式
+                            self.it8811.write("MODE CR")
+                            print("IT8811切换到CR模式")
+                            # 短暂延迟
+                            time.sleep(0.3)
+                        except Exception as e:
+                            print(f"模式切换失败: {str(e)}")
+                            print("继续执行，尝试保持连接")
+                        
+                        # 验证连接是否成功
+                        try:
+                            # 尝试读取电阻值
+                            resistance = self.it8811.query("RES?").strip()
+                            print(f"验证连接成功，当前电阻值: {resistance}")
+                        except Exception as e:
+                            print(f"连接验证失败: {str(e)}")
+                            print("继续执行，假设连接成功")
+                        
+                        self.it8811_connected = True
+                        print("===== IT8811连接成功 =====")
+                        return True, "IT8811连接成功"
+                    except pyvisa.errors.VisaIOError as e:
+                        if "timeout" in str(e).lower():
+                            print(f"连接IT8811超时: {str(e)}")
+                            # 关闭当前资源，准备重试
+                            if self.it8811:
+                                try:
+                                    self.it8811.close()
+                                except:
+                                    pass
+                                self.it8811 = None
+                            # 短暂延迟后重试
+                            time.sleep(1.0)
+                            continue
+                        else:
+                            print(f"连接IT8811失败: {str(e)}")
+                            # 关闭当前资源
+                            if self.it8811:
+                                try:
+                                    self.it8811.close()
+                                except:
+                                    pass
+                                self.it8811 = None
+                            return False, f"连接IT8811失败: {str(e)}"
                 except Exception as e:
-                    print(f"模式切换失败: {str(e)}")
-                    print("继续执行，尝试保持连接")
-                
-                self.it8811_connected = True
-                return True, "IT8811连接成功并切换到CR模式"
-            except pyvisa.errors.VisaIOError as e:
-                if "timeout" in str(e).lower():
-                    return False, "连接IT8811超时，请检查设备连接"
-                else:
-                    return False, f"连接IT8811失败: {str(e)}"
+                    print(f"连接IT8811异常: {str(e)}")
+                    # 关闭当前资源
+                    if self.it8811:
+                        try:
+                            self.it8811.close()
+                        except:
+                            pass
+                        self.it8811 = None
+                    # 短暂延迟后重试
+                    time.sleep(1.0)
+                    continue
+            
+            # 所有重试都失败
+            return False, f"连接IT8811失败: 多次尝试后仍无法连接"
         except Exception as e:
+            print(f"连接IT8811出现严重错误: {str(e)}")
+            # 确保资源被释放
+            if self.it8811:
+                try:
+                    self.it8811.close()
+                except:
+                    pass
+                self.it8811 = None
             return False, f"连接IT8811失败: {str(e)}"
     
     def disconnect_it8811(self):
@@ -210,12 +302,12 @@ class DeviceController:
         try:
             # 设置连接超时
             self.dmm6500 = self.rm.open_resource(resource)
-            self.dmm6500.timeout = 5000  # 5秒超时
+            self.dmm6500.timeout = Config.CONNECTION_TIMEOUT  # 使用配置文件中的超时时间
             
             # 测试连接
             try:
-                self.dmm6500.write("*IDN?")
-                idn = self.dmm6500.read()
+                # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                idn = self.dmm6500.query("*IDN?")
                 print(f"DMM6500 IDN: {idn}")
                 
                 # 设置为DCV模式
@@ -249,12 +341,12 @@ class DeviceController:
         try:
             # 设置连接超时
             self.keysight_34461a = self.rm.open_resource(resource)
-            self.keysight_34461a.timeout = 5000  # 5秒超时
+            self.keysight_34461a.timeout = Config.CONNECTION_TIMEOUT  # 使用配置文件中的超时时间
             
             # 测试连接
             try:
-                self.keysight_34461a.write("*IDN?")
-                idn = self.keysight_34461a.read()
+                # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                idn = self.keysight_34461a.query("*IDN?")
                 print(f"KEYSIGHT 34461A IDN: {idn}")
                 
                 # 设置为DCI模式（直流电流）
@@ -289,21 +381,38 @@ class DeviceController:
             return False, "请先连接KEYSIGHT 34461A"
         
         try:
-            # 尝试多种测量命令
+            # 设置合理的超时时间
+            original_timeout = self.keysight_34461a.timeout
+            self.keysight_34461a.timeout = Config.CONNECTION_TIMEOUT
+            
+            # 尝试多种测量命令，最多重试1次
             measure_commands = ["MEAS:CURR:DC?", "CURR:DC?", "MEASURE:CURRENT:DC?", "READ?"]
+            max_retries = 1
+            
             for cmd in measure_commands:
-                try:
-                    self.keysight_34461a.write(cmd)
-                    current = self.keysight_34461a.read().strip()
-                    print(f"获取电流值成功: {current}")
-                    return True, current
-                except Exception as e:
-                    print(f"测量命令 {cmd} 失败: {str(e)}")
-                    continue
+                for retry in range(max_retries):
+                    try:
+                        # 给设备一点准备时间
+                        time.sleep(0.3)
+                        
+                        # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                        current = self.keysight_34461a.query(cmd).strip()
+                        self.keysight_34461a.timeout = original_timeout  # 恢复默认值
+                        print(f"获取电流值成功: {current}")
+                        return True, current
+                    except Exception as e:
+                        print(f"测量命令 {cmd} 失败 (第{retry + 1}次): {str(e)}")
+                        # 短暂延迟后重试
+                        time.sleep(0.5)
+                        continue
             
             # 所有命令都失败
+            self.keysight_34461a.timeout = original_timeout  # 恢复默认值
             return False, "所有测量命令都失败"
         except Exception as e:
+            # 恢复超时设置
+            if hasattr(self, 'keysight_34461a') and self.keysight_34461a:
+                self.keysight_34461a.timeout = original_timeout
             return False, f"获取电流值失败: {str(e)}"
     
     def set_resistance(self, resistance):
@@ -421,22 +530,30 @@ class DeviceController:
             return False, "请先连接IT8811"
         
         try:
-            # 减少超时时间，提高响应速度
+            # 设置合理的超时时间，既不过长也不过短
             original_timeout = self.it8811.timeout
-            self.it8811.timeout = 3000  # 减少到3秒
+            self.it8811.timeout = Config.CONNECTION_TIMEOUT  # 使用配置文件中的超时时间
             
-            # 尝试多种测量命令
-            measure_commands = ["MEAS:RES?", "RES?", "MEASURE:RESISTANCE?"]
+            # 尝试多种测量命令，优先使用简单命令
+            measure_commands = ["RES?", "MEAS:RES?"]
+            max_retries = 1  # 每个命令最多重试1次，减少设备负担
+            
             for cmd in measure_commands:
-                try:
-                    self.it8811.write(cmd)
-                    resistance = self.it8811.read().strip()
-                    self.it8811.timeout = original_timeout  # 恢复默认值
-                    print(f"获取电阻值成功: {resistance}")
-                    return True, resistance
-                except Exception as e:
-                    print(f"测量命令 {cmd} 失败: {str(e)}")
-                    continue
+                for retry in range(max_retries):
+                    try:
+                        # 给设备一点准备时间
+                        time.sleep(0.3)
+                        
+                        # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                        resistance = self.it8811.query(cmd).strip()
+                        self.it8811.timeout = original_timeout  # 恢复默认值
+                        print(f"获取电阻值成功: {resistance}")
+                        return True, resistance
+                    except Exception as e:
+                        print(f"测量命令 {cmd} 失败 (第{retry + 1}次): {str(e)}")
+                        # 短暂延迟后重试，给设备一点恢复时间
+                        time.sleep(0.5)
+                        continue
             
             # 所有命令都失败
             self.it8811.timeout = original_timeout  # 恢复默认值
@@ -453,8 +570,36 @@ class DeviceController:
             return False, "请先连接DMM6500"
         
         try:
-            self.dmm6500.write("MEAS:VOLT:DC?")
-            voltage = self.dmm6500.read().strip()
-            return True, voltage
+            # 设置合理的超时时间
+            original_timeout = self.dmm6500.timeout
+            self.dmm6500.timeout = Config.CONNECTION_TIMEOUT
+            
+            # 尝试多种测量命令，最多重试1次
+            measure_commands = ["MEAS:VOLT:DC?", "VOLT:DC?", "MEASURE:VOLTAGE:DC?", "READ?"]
+            max_retries = 1
+            
+            for cmd in measure_commands:
+                for retry in range(max_retries):
+                    try:
+                        # 给设备一点准备时间
+                        time.sleep(0.3)
+                        
+                        # 使用query方法代替单独的write-read操作，避免缓冲区同步问题
+                        voltage = self.dmm6500.query(cmd).strip()
+                        self.dmm6500.timeout = original_timeout  # 恢复默认值
+                        print(f"获取电压值成功: {voltage}")
+                        return True, voltage
+                    except Exception as e:
+                        print(f"测量命令 {cmd} 失败 (第{retry + 1}次): {str(e)}")
+                        # 短暂延迟后重试
+                        time.sleep(0.5)
+                        continue
+            
+            # 所有命令都失败
+            self.dmm6500.timeout = original_timeout  # 恢复默认值
+            return False, "所有测量命令都失败"
         except Exception as e:
+            # 恢复超时设置
+            if hasattr(self, 'dmm6500') and self.dmm6500:
+                self.dmm6500.timeout = original_timeout
             return False, f"获取电压值失败: {str(e)}"

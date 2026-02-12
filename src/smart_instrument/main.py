@@ -46,6 +46,9 @@ class AutoTestTool:
         # 数据存储
         self.data = []
         
+        # 采集状态标志，确保同一时间只有一个采集请求在处理
+        self.is_collecting = False
+        
         # 创建GUI
         self.create_widgets()
         
@@ -774,6 +777,14 @@ class AutoTestTool:
     
     def manual_trigger(self):
         """手动触发记录数据（非阻塞式）"""
+        # 检查是否正在采集数据，如果是则拒绝新的采集请求
+        if self.is_collecting:
+            self.log("正在采集数据，请稍后再试", level="WARNING")
+            return
+        
+        # 设置采集状态标志为True
+        self.is_collecting = True
+        
         # 创建后台线程执行数据采集操作
         def trigger_thread():
             try:
@@ -860,6 +871,9 @@ class AutoTestTool:
                 error_msg = f"手动触发失败: {str(e)}"
                 self.root.after(0, lambda: messagebox.showerror("错误", error_msg))
                 self.root.after(0, lambda: self.log(error_msg, level="ERROR"))
+            finally:
+                # 无论采集成功与否，都将采集状态标志设置为False
+                self.is_collecting = False
         
         # 启动后台线程
         thread = threading.Thread(target=trigger_thread)
@@ -869,52 +883,71 @@ class AutoTestTool:
     def record_data(self):
         """记录数据"""
         try:
+            # 检查设备是否连接
+            if not hasattr(self, 'device_controller') or not self.device_controller.it8811_connected:
+                messagebox.showerror("错误", "请先连接IT8811设备")
+                return
+            
+            if not hasattr(self, 'device_controller') or not self.device_controller.dmm6500_connected:
+                messagebox.showerror("错误", "请先连接DMM6500设备")
+                return
+            
             # 获取IT8811的电阻数据
-            try:
-                self.it8811.write("MEAS:RES?")
-                resistance = self.it8811.read().strip()
-            except pyvisa.errors.VisaIOError as e:
-                if "timeout" in str(e).lower():
-                    messagebox.showerror("错误", "IT8811数据采集超时，请检查设备连接")
-                    return
-                else:
-                    raise
+            res_success, resistance = self.device_controller.get_resistance()
+            if not res_success:
+                # 如果获取电阻值失败，使用输入框中的值
+                resistance = self.resistance_entry.get()
+                self.log(f"获取电阻值失败，使用输入框值: {resistance}Ω", level="WARNING")
             
             # 获取DMM6500的电压数据
+            volt_success, voltage = self.device_controller.get_voltage()
+            if not volt_success:
+                messagebox.showerror("错误", voltage)
+                self.log(voltage, level="ERROR")
+                return
+            
+            # 格式化电压值，保留小数点后四位，四舍五入，不使用科学计数法
             try:
-                self.dmm6500.write("MEAS:VOLT:DC?")
-                voltage = self.dmm6500.read().strip()
-            except pyvisa.errors.VisaIOError as e:
-                if "timeout" in str(e).lower():
-                    messagebox.showerror("错误", "DMM6500数据采集超时，请检查设备连接")
-                    return
-                else:
-                    raise
+                voltage_value = float(voltage)
+                formatted_voltage = f"{voltage_value:.4f}"
+                voltage = formatted_voltage
+            except ValueError:
+                # 如果电压值格式不正确，保持原样
+                pass
             
-            # 更新列计数
-            self.column_count += 1
-            col_name = f"col{self.column_count}"
-            
-            # 更新表格
-            if col_name not in self.tree["columns"]:
-                self.tree["columns"] = self.tree["columns"] + (col_name,)
-                self.tree.column(col_name, width=150, minwidth=100, stretch=tk.YES)
-                self.tree.heading(col_name, text=f"触发{self.column_count}")
-            
-            # 插入数据
-            self.tree.set(self.tree.get_children()[0], col_name, resistance)
-            self.tree.set(self.tree.get_children()[1], col_name, voltage)
-            
-            # 保存到数据列表
-            if len(self.data) < 2:
-                self.data.append([])  # IT8811数据
-                self.data.append([])  # DMM6500数据
-            
-            self.data[0].append(resistance)
-            self.data[1].append(voltage)
-            
+            # 记录数据
+            success, msg = self.data_manager.record_data(resistance, voltage, "")
+            if success:
+                # 更新表格
+                col_count = msg
+                col_name = f"col{col_count}"
+                
+                # 在主线程中更新UI
+                def update_tree():
+                    # 更新表格
+                    if col_name not in self.tree["columns"]:
+                        self.tree["columns"] = self.tree["columns"] + (col_name,)
+                        self.tree.column(col_name, width=150, minwidth=100, stretch=tk.YES)
+                        self.tree.heading(col_name, text=f"触发{col_count}")
+                    
+                    # 插入数据
+                    try:
+                        self.tree.set(self.tree.get_children()[0], col_name, resistance)
+                        self.tree.set(self.tree.get_children()[1], col_name, voltage)
+                    except Exception as e:
+                        self.log(f"更新表格失败: {str(e)}", level="ERROR")
+                    
+                    log_message = f"数据采集成功: 电阻={resistance}Ω, 电压={voltage}V"
+                    self.log(log_message)
+                
+                self.root.after(0, update_tree)
+            else:
+                messagebox.showerror("错误", msg)
+                self.log(msg, level="ERROR")
         except Exception as e:
-            messagebox.showerror("错误", f"记录数据失败: {str(e)}")
+            error_msg = f"记录数据失败: {str(e)}"
+            messagebox.showerror("错误", error_msg)
+            self.log(error_msg, level="ERROR")
     
     def save_to_csv(self):
         """保存数据到CSV文件"""
