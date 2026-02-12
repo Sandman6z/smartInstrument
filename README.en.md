@@ -4,55 +4,32 @@
 
 ## Project Overview
 
-This is an automated test tool for IT8811 (electronic load) and DMM6500 (digital multimeter) devices, providing an intuitive GUI interface for device control and data collection.
+This is an automated test tool for electronic test equipment, providing an intuitive GUI interface for device control and data collection. It supports IT8811 (electronic load), DMM6500 (digital multimeter), and KEYSIGHT 34461A (multimeter) devices.
 
 ## Main Features
 
-- **Device Auto-scan and Recognition**: Automatically scans available VISA devices and identifies IT8811 and DMM6500 devices
-- **Device Connection Management**: Supports connection and disconnection operations for IT8811 and DMM6500
+- **Device Auto-scan and Recognition**: Automatically scans available VISA devices and prioritizes LAN-connected devices
+- **Device Connection Management**: Supports connection and disconnection operations for IT8811, DMM6500, and KEYSIGHT 34461A
 - **IT8811 Control**:
-  - Resistance value setting (supports input box and slider adjustment)
+  - Resistance value setting (supports input box and slider adjustment, range 10-7500Ω)
   - Output switch control (slide toggle button)
 - **DMM6500 Measurement**: Real-time voltage measurement
+- **KEYSIGHT 34461A Measurement**: Real-time current measurement (automatically converted to μA unit)
 - **Data Recording**:
   - Manual trigger data collection
   - Real-time data display in table
-  - Data saving to Excel and CSV files
+  - Data saving to CSV files
+  - Support for clearing test data
 - **Real-time Logging**: Operation logs output in real-time
 
 ## Technical Features
 
 - Uses tkinter to build an intuitive GUI interface
 - Uses pyvisa library for device communication
-- Uses openpyxl library for Excel file operations
 - Uses multi-threading for device communication to avoid UI blocking
 - Has good error handling and logging mechanisms
 - Supports multiple device command formats to improve compatibility
-
-## Project Structure
-
-```
-smartInstrument/
-├── src/                    # Source code directory
-│   ├── smart_instrument/   # Main package directory
-│   │   ├── __init__.py     # Package initialization file
-│   │   ├── main.py         # Main entry file, containing GUI interface and main business logic
-│   │   ├── config.py       # Configuration file, storing default configuration parameters
-│   │   ├── device/         # Device-related modules
-│   │   │   ├── __init__.py
-│   │   │   └── controller.py  # Device control module, responsible for device communication
-│   │   ├── data/           # Data-related modules
-│   │   │   ├── __init__.py
-│   │   │   └── manager.py     # Data management module, responsible for data recording and file export
-│   │   └── gui/            # GUI-related modules
-│   │       └── __init__.py
-├── README.md               # Project description document (Chinese)
-├── README.en.md            # Project description document (English)
-├── run.py                  # Startup script
-├── pyproject.toml          # Project dependencies and configuration file
-├── requirements.txt        # Dependency list file
-└── .gitignore              # Git ignore file configuration
-```
+- Intelligent device recognition, prioritizing LAN-connected devices
 
 ## Installation and Usage
 
@@ -74,18 +51,20 @@ python run.py
 
 ### 3. Usage Steps
 
-1. After starting the application, the system will automatically scan for available VISA devices
-2. Select and connect IT8811 and DMM6500 devices
-3. Set the resistance value of IT8811 (via input box or slider)
+1. After starting the application, the system will automatically scan for available VISA devices and try to automatically connect to identified devices
+2. If not automatically connected, you can manually select and connect IT8811, DMM6500, and KEYSIGHT 34461A devices
+3. Set the resistance value of IT8811 (via input box or slider adjustment)
 4. Control the output switch of IT8811
 5. Click the "Manual Trigger Record" button to collect data
 6. Data will be displayed in the table in real-time
 7. Click the "Save Data to CSV" button to save data
+8. To clear data, click the "Clear Test Data" button
 
 ## Device Requirements
 
 - IT8811 electronic load device
 - DMM6500 digital multimeter device
+- KEYSIGHT 34461A multimeter device (optional)
 - VISA driver (needs to be installed in advance)
 
 ## Dependencies
