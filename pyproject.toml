@@ -17,6 +17,9 @@ packages = ["smart_instrument"]
 [tool.setuptools.package-dir]
 smart_instrument = "src/smart_instrument"
 
+[project.scripts]
+smart_instrument = "smart_instrument.__main__:main"
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
