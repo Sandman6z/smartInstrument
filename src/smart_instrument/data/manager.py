@@ -32,7 +32,7 @@ class DataManager:
     def save_to_csv(self):
         """保存数据到CSV文件"""
         if not self.data:
-            return False, "没有数据可保存"
+            return False, "没有数据可保存", ""
         
         try:
             # 生成带日期时间的文件名
@@ -71,9 +71,9 @@ class DataManager:
                 row3 = ['KEYSIGHT 34461A (电流)'] + (self.data[2] if len(self.data) > 2 else [])
                 writer.writerow(row3)
             
-            return True, f"数据已保存到 {filename}"
+            return True, f"数据已保存到 {filename}", filename
         except Exception as e:
-            return False, f"保存数据失败: {str(e)}"
+            return False, f"保存数据失败: {str(e)}", ""
     
     def clear_data(self):
         """清空数据"""

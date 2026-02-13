@@ -952,9 +952,52 @@ class AutoTestTool:
     def save_to_csv(self):
         """保存数据到CSV文件"""
         try:
-            success, msg = self.data_manager.save_to_csv()
+            success, msg, filename = self.data_manager.save_to_csv()
             if success:
-                messagebox.showinfo("成功", msg)
+                # 创建自定义对话框
+                dialog = tk.Toplevel(self.root)
+                dialog.title("保存成功")
+                dialog.geometry("300x120")
+                dialog.transient(self.root)
+                dialog.grab_set()
+                
+                # 计算并设置对话框位置到屏幕中心
+                dialog.update_idletasks()
+                width = dialog.winfo_width()
+                height = dialog.winfo_height()
+                x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+                y = (dialog.winfo_screenheight() // 2) - (height // 2)
+                dialog.geometry(f"{width}x{height}+{x}+{y}")
+                
+                # 显示消息
+                label = ttk.Label(dialog, text=msg, padding=10)
+                label.pack(fill=tk.X, pady=10)
+                
+                # 创建按钮框架
+                button_frame = ttk.Frame(dialog)
+                button_frame.pack(fill=tk.X, pady=5)
+                
+                # 打开按钮
+                def open_csv():
+                    import os
+                    import subprocess
+                    try:
+                        # 打开CSV文件
+                        if os.name == 'nt':  # Windows
+                            os.startfile(filename)
+                        elif os.name == 'posix':  # macOS/Linux
+                            subprocess.call(['open', filename])
+                        dialog.destroy()
+                    except Exception as e:
+                        messagebox.showerror("错误", f"打开文件失败: {str(e)}")
+                
+                open_button = ttk.Button(button_frame, text="打开", command=open_csv)
+                open_button.pack(side=tk.RIGHT, padx=5)
+                
+                # 确定按钮
+                ok_button = ttk.Button(button_frame, text="确定", command=dialog.destroy)
+                ok_button.pack(side=tk.RIGHT, padx=5)
+                
                 self.log(msg)
             else:
                 messagebox.showerror("错误", msg)
@@ -1034,7 +1077,7 @@ class AutoTestTool:
                 return
             elif result:
                 # 保存数据
-                success, msg = self.data_manager.save_to_csv()
+                success, msg, filename = self.data_manager.save_to_csv()
                 if success:
                     self.log(msg)
                 else:
