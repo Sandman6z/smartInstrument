@@ -52,8 +52,13 @@ class AutoTestTool:
         # 创建GUI
         self.create_widgets()
         
-        # 扫描设备
-        self.scan_devices()
+        # 在后台线程中扫描设备，确保UI先打开
+        def scan_devices_thread():
+            self.scan_devices()
+        
+        thread = threading.Thread(target=scan_devices_thread)
+        thread.daemon = True
+        thread.start()
     
     def create_widgets(self):
         # 创建菜单栏
@@ -212,10 +217,16 @@ class AutoTestTool:
         # 触发按钮
         self.trigger_button = ttk.Button(trigger_frame, text="手动触发记录", command=self.manual_trigger, style="TButton")
         self.trigger_button.pack(pady=10)
+        self.trigger_button.config(state=tk.DISABLED)  # 默认禁用
         
         # 设置按钮样式
         style = ttk.Style()
         style.configure("TButton", font=(".SF NS Text", 12))
+        
+        # 禁用设备调节组件
+        self.resistance_entry.config(state=tk.DISABLED)
+        self.resistance_scale.config(state=tk.DISABLED)
+        self.output_switch.config(state=tk.DISABLED)
         
         # 数据显示
         data_frame = ttk.LabelFrame(main_frame, text="数据记录", padding="10")
@@ -266,6 +277,16 @@ class AutoTestTool:
     
     def scan_devices(self):
         """扫描可用的VISA设备"""
+        # 更新状态为扫描中
+        self.it8811_status.config(text="扫描中...", foreground="orange")
+        self.dmm6500_status.config(text="扫描中...", foreground="orange")
+        self.keysight_status.config(text="扫描中...", foreground="orange")
+        
+        # 禁用下拉框，避免用户在扫描过程中进行操作
+        self.it8811_resource.config(state=tk.DISABLED)
+        self.dmm6500_resource.config(state=tk.DISABLED)
+        self.keysight_resource.config(state=tk.DISABLED)
+        
         try:
             # 使用device_controller扫描设备
             device_list, self.device_info, it8811_device, dmm6500_device, keysight_34461a_device = self.device_controller.scan_devices()
@@ -274,6 +295,10 @@ class AutoTestTool:
             if not device_list:
                 messagebox.showinfo("提示", "未找到任何VISA设备")
                 self.log("未找到任何VISA设备")
+                # 更新状态为未连接
+                self.it8811_status.config(text="未连接", foreground="red")
+                self.dmm6500_status.config(text="未连接", foreground="red")
+                self.keysight_status.config(text="未连接", foreground="red")
             else:
                 msg = f"找到设备数量: {len(device_list)}"
                 print(msg)
@@ -281,6 +306,11 @@ class AutoTestTool:
                 msg = f"设备列表: {device_list}"
                 print(msg)
                 self.log(msg)
+            
+            # 重新启用下拉框
+            self.it8811_resource.config(state=tk.NORMAL)
+            self.dmm6500_resource.config(state=tk.NORMAL)
+            self.keysight_resource.config(state=tk.NORMAL)
             
             # 设置设备列表
             self.it8811_resource['values'] = device_list
@@ -326,6 +356,11 @@ class AutoTestTool:
             print(error_msg)
             self.log(error_msg, level="ERROR")
             messagebox.showerror("错误", error_msg)
+        finally:
+            # 无论扫描成功还是失败，都重新启用下拉框
+            self.it8811_resource.config(state=tk.NORMAL)
+            self.dmm6500_resource.config(state=tk.NORMAL)
+            self.keysight_resource.config(state=tk.NORMAL)
     
     def connect_it8811(self):
         """连接IT8811（非阻塞式）"""
@@ -350,6 +385,12 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.it8811_status.config(text="已连接", foreground="green"))
                     self.root.after(0, lambda: self.it8811_button.config(text="断开", command=self.disconnect_it8811))
                     self.root.after(0, lambda: self.log(msg))
+                    # 启用IT8811调节组件
+                    self.root.after(0, lambda: self.resistance_entry.config(state=tk.NORMAL))
+                    self.root.after(0, lambda: self.resistance_scale.config(state=tk.NORMAL))
+                    self.root.after(0, lambda: self.output_switch.config(state=tk.NORMAL))
+                    # 检查是否所有设备都已连接，启用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.it8811_status.config(text="未连接", foreground="red"))
@@ -382,6 +423,12 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.it8811_status.config(text="未连接", foreground="red"))
                     self.root.after(0, lambda: self.it8811_button.config(text="连接", command=self.connect_it8811))
                     self.root.after(0, lambda: self.log(msg))
+                    # 禁用IT8811调节组件
+                    self.root.after(0, lambda: self.resistance_entry.config(state=tk.DISABLED))
+                    self.root.after(0, lambda: self.resistance_scale.config(state=tk.DISABLED))
+                    self.root.after(0, lambda: self.output_switch.config(state=tk.DISABLED))
+                    # 检查是否所有设备都已连接，禁用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.it8811_status.config(text="已连接", foreground="green"))
@@ -421,6 +468,12 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.it8811_status.config(text="已连接", foreground="green"))
                     self.root.after(0, lambda: self.it8811_button.config(text="断开", command=self.disconnect_it8811))
                     self.root.after(0, lambda: self.log(msg))
+                    # 启用IT8811调节组件
+                    self.root.after(0, lambda: self.resistance_entry.config(state=tk.NORMAL))
+                    self.root.after(0, lambda: self.resistance_scale.config(state=tk.NORMAL))
+                    self.root.after(0, lambda: self.output_switch.config(state=tk.NORMAL))
+                    # 检查是否所有设备都已连接，启用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.it8811_status.config(text="未连接", foreground="red"))
@@ -458,6 +511,8 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.dmm6500_status.config(text="已连接", foreground="green"))
                     self.root.after(0, lambda: self.dmm6500_button.config(text="断开", command=self.disconnect_dmm6500))
                     self.root.after(0, lambda: self.log(msg))
+                    # 检查是否所有设备都已连接，启用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.dmm6500_status.config(text="未连接", foreground="red"))
@@ -495,6 +550,8 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
                     self.root.after(0, lambda: self.keysight_button.config(text="断开", command=self.disconnect_keysight_34461a))
                     self.root.after(0, lambda: self.log(msg))
+                    # 检查是否所有设备都已连接，启用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
@@ -605,6 +662,8 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.dmm6500_status.config(text="未连接", foreground="red"))
                     self.root.after(0, lambda: self.dmm6500_button.config(text="连接", command=self.connect_dmm6500))
                     self.root.after(0, lambda: self.log(msg))
+                    # 检查是否所有设备都已连接，禁用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.dmm6500_status.config(text="已连接", foreground="green"))
@@ -637,6 +696,8 @@ class AutoTestTool:
                     self.root.after(0, lambda: self.keysight_status.config(text="未连接", foreground="red"))
                     self.root.after(0, lambda: self.keysight_button.config(text="连接", command=self.connect_keysight_34461a))
                     self.root.after(0, lambda: self.log(msg))
+                    # 检查是否所有设备都已连接，禁用手动触发按钮
+                    self.root.after(0, self.check_all_devices_connected)
                 else:
                     # 在主线程中更新UI
                     self.root.after(0, lambda: self.keysight_status.config(text="已连接", foreground="green"))
@@ -1060,6 +1121,18 @@ class AutoTestTool:
             error_msg = f"清除测试数据失败: {str(e)}"
             messagebox.showerror("错误", error_msg)
             self.log(error_msg, level="ERROR")
+    
+    def check_all_devices_connected(self):
+        """检查所有设备是否已连接，启用手动触发按钮"""
+        # 检查设备连接状态
+        if (hasattr(self.device_controller, 'it8811_connected') and self.device_controller.it8811_connected and
+            hasattr(self.device_controller, 'dmm6500_connected') and self.device_controller.dmm6500_connected and
+            hasattr(self.device_controller, 'keysight_34461a_connected') and self.device_controller.keysight_34461a_connected):
+            # 启用手动触发按钮
+            self.trigger_button.config(state=tk.NORMAL)
+        else:
+            # 禁用手动触发按钮
+            self.trigger_button.config(state=tk.DISABLED)
     
     def on_closing(self):
         """关闭窗口前的处理"""
