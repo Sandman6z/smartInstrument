@@ -24,6 +24,7 @@
           :step="10" 
           style="width: 300px; margin-left: 20px;"
           @change="onResistanceChange"
+          @wheel="onSliderWheel"
         />
         <el-button 
           type="primary" 
@@ -93,6 +94,20 @@ const addLog = (message, type = 'info') => {
 // 电阻值变化
 const onResistanceChange = (value) => {
   console.log('电阻值变化:', value)
+}
+
+// 滑块鼠标滚轮事件
+const onSliderWheel = (event) => {
+  // 阻止默认滚动行为
+  event.preventDefault()
+  // 计算新值（每次滚动调整10Ω）
+  if (event.deltaY < 0) { // 向上滚动
+    form.value.resistance = Math.min(form.value.resistance + 10, 7500)
+  } else { // 向下滚动
+    form.value.resistance = Math.max(form.value.resistance - 10, 10)
+  }
+  // 立即设置电阻值
+  setResistance()
 }
 
 // 设置电阻值
