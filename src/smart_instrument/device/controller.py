@@ -450,10 +450,19 @@ class DeviceController:
             return False, "请先连接IT8811"
         
         try:
+            print(f"===== 设置IT8811电阻值: {resistance} Ω =====")
             # 设置电阻值
             self.it8811.write(f"RES {resistance}")
+            # 验证电阻值是否设置成功
+            try:
+                # 读取设置后的电阻值
+                set_resistance = self.it8811.query("RES?").strip()
+                print(f"设置电阻值成功，当前值: {set_resistance} Ω")
+            except Exception as e:
+                print(f"验证电阻值失败: {str(e)}")
             return True, f"电阻值设置为 {resistance} Ω"
         except Exception as e:
+            print(f"设置电阻值失败: {str(e)}")
             return False, f"设置电阻值失败: {str(e)}"
     
     def toggle_output(self, state):

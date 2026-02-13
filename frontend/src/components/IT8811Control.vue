@@ -99,9 +99,11 @@ const onResistanceChange = (value) => {
 const setResistance = async () => {
   settingResistance.value = true
   try {
+    console.log('发送电阻值设置请求:', form.value.resistance)
     const response = await axios.post('/api/it8811/resistance', {
       resistance: form.value.resistance.toString()
     })
+    console.log('电阻值设置响应:', response.data)
     
     if (response.data.success) {
       ElMessage.success('电阻值设置成功')

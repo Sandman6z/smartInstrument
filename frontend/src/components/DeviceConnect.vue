@@ -78,25 +78,7 @@
       </el-form-item>
     </el-form>
     
-    <!-- 设备状态信息 -->
-    <el-divider>设备状态</el-divider>
-    <el-descriptions :column="3" border>
-      <el-descriptions-item label="IT8811">
-        <el-tag :type="status.it8811.connected ? 'success' : 'danger'">
-          {{ status.it8811.connected ? '已连接' : '未连接' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="DMM6500">
-        <el-tag :type="status.dmm6500.connected ? 'success' : 'danger'">
-          {{ status.dmm6500.connected ? '已连接' : '未连接' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="KEYSIGHT">
-        <el-tag :type="status.keysight.connected ? 'success' : 'danger'">
-          {{ status.keysight.connected ? '已连接' : '未连接' }}
-        </el-tag>
-      </el-descriptions-item>
-    </el-descriptions>
+
   </el-card>
 </template>
 
@@ -134,12 +116,18 @@ const scanDevices = async () => {
       // 自动选择设备
       if (response.data.auto_selected.it8811) {
         form.value.it8811Resource = response.data.auto_selected.it8811
+        // 自动连接IT8811
+        await connectDevice('it8811')
       }
       if (response.data.auto_selected.dmm6500) {
         form.value.dmm6500Resource = response.data.auto_selected.dmm6500
+        // 自动连接DMM6500
+        await connectDevice('dmm6500')
       }
       if (response.data.auto_selected.keysight) {
         form.value.keysightResource = response.data.auto_selected.keysight
+        // 自动连接KEYSIGHT
+        await connectDevice('keysight')
       }
       ElMessage.success(`扫描完成，找到 ${response.data.devices.length} 个设备`)
     } else {
