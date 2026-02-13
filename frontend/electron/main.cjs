@@ -15,7 +15,7 @@ function createWindow () {
       contextIsolation: false,
       webSecurity: false // 禁用 web 安全策略，允许加载本地文件
     },
-    title: '智能仪器测试系统',
+    title: 'SmartInstrument',
     // 禁用自动更新检查
     autoHideMenuBar: true
   })

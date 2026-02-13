@@ -29,7 +29,7 @@
   },
   "build": {
     "appId": "com.smartinstrument.app",
-    "productName": "智能仪器测试系统",
+    "productName": "SmartInstrument",
     "copyright": "Copyright © 2026 ${author}",
     "directories": {
       "output": "dist-electron"
@@ -40,17 +40,7 @@
     ],
     "win": {
       "target": [
-        "nsis",
         "portable"
-      ]
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
       ]
     }
   }
