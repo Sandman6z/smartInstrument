@@ -46,6 +46,11 @@ def connect_device():
     
     try:
         if action == 'connect':
+            # 确保device_info已设置
+            if not device_controller.device_info:
+                # 如果device_info为空，先扫描设备获取映射
+                device_controller.scan_devices()
+            
             if device_type == 'it8811':
                 success, msg = device_controller.connect_it8811(resource)
             elif device_type == 'dmm6500':
@@ -147,17 +152,46 @@ def clear_data():
 @app.route('/api/devices/status', methods=['GET'])
 def get_device_status():
     try:
+        # 验证设备连接状态
+        def validate_connection(device, connected_flag):
+            if not connected_flag or not device:
+                return False
+            try:
+                # 尝试发送简单命令验证连接
+                device.query("*IDN?")
+                return True
+            except:
+                return False
+        
+        # 验证IT8811连接
+        it8811_connected = validate_connection(device_controller.it8811, device_controller.it8811_connected)
+        if not it8811_connected:
+            device_controller.it8811_connected = False
+            device_controller.it8811 = None
+        
+        # 验证DMM6500连接
+        dmm6500_connected = validate_connection(device_controller.dmm6500, device_controller.dmm6500_connected)
+        if not dmm6500_connected:
+            device_controller.dmm6500_connected = False
+            device_controller.dmm6500 = None
+        
+        # 验证KEYSIGHT连接
+        keysight_connected = validate_connection(device_controller.keysight_34461a, device_controller.keysight_34461a_connected)
+        if not keysight_connected:
+            device_controller.keysight_34461a_connected = False
+            device_controller.keysight_34461a = None
+        
         status = {
             "it8811": {
-                "connected": device_controller.it8811_connected,
+                "connected": it8811_connected,
                 "info": device_controller.it8811_info if hasattr(device_controller, 'it8811_info') else {}
             },
             "dmm6500": {
-                "connected": device_controller.dmm6500_connected,
+                "connected": dmm6500_connected,
                 "info": device_controller.dmm6500_info if hasattr(device_controller, 'dmm6500_info') else {}
             },
             "keysight": {
-                "connected": device_controller.keysight_34461a_connected,
+                "connected": keysight_connected,
                 "info": device_controller.keysight_34461a_info if hasattr(device_controller, 'keysight_34461a_info') else {}
             }
         }

@@ -171,7 +171,8 @@ const connectDevice = async (deviceType) => {
     })
     
     if (response.data.success) {
-      status.value[deviceType].connected = !status.value[deviceType].connected
+      // 重新获取设备状态，确保状态准确
+      await getDeviceStatus()
       ElMessage.success(response.data.message)
     } else {
       ElMessage.error(response.data.message)
@@ -197,9 +198,9 @@ const getDeviceStatus = async () => {
 }
 
 // 初始化
-onMounted(() => {
-  scanDevices()
-  getDeviceStatus()
+onMounted(async () => {
+  await scanDevices()
+  await getDeviceStatus()
 })
 </script>
 
