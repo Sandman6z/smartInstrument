@@ -14,6 +14,8 @@ class DeviceController:
         self.it8811_connected = False
         self.dmm6500_connected = False
         self.keysight_34461a_connected = False
+        # 设备信息映射，用于存储display_text到原始resource的映射
+        self.device_info = {}
     
     def scan_devices(self):
         """扫描可用的VISA设备，优先识别LAN连接的设备"""
@@ -177,6 +179,9 @@ class DeviceController:
             print(f"最终选择的DMM6500: {dmm6500_device}")
             print(f"最终选择的KEYSIGHT 34461A: {keysight_34461a_device}")
             
+            # 保存设备信息映射到实例变量
+            self.device_info = device_info
+            
             return device_list, device_info, it8811_device, dmm6500_device, keysight_34461a_device
         except Exception as e:
             print(f"扫描设备失败: {str(e)}")
@@ -185,6 +190,14 @@ class DeviceController:
     def connect_it8811(self, resource):
         """连接IT8811"""
         try:
+            # 检查传入的resource是否在device_info中，如果在，使用对应的原始资源名称
+            if resource in self.device_info:
+                actual_resource = self.device_info[resource]
+                print(f"使用原始资源名称: {actual_resource} (从 {resource} 映射)")
+            else:
+                actual_resource = resource
+                print(f"直接使用资源名称: {actual_resource}")
+            
             # 最多重试3次连接
             max_retries = 3
             for retry in range(max_retries):
@@ -199,7 +212,7 @@ class DeviceController:
                         self.it8811 = None
                     
                     # 设置连接参数
-                    self.it8811 = self.rm.open_resource(resource)
+                    self.it8811 = self.rm.open_resource(actual_resource)
                     self.it8811.timeout = Config.CONNECTION_TIMEOUT  # 设置为配置文件中的超时时间
                     self.it8811.chunk_size = 1024  # 设置块大小
                     self.it8811.read_termination = '\n'  # 设置读取终止符
@@ -300,8 +313,16 @@ class DeviceController:
     def connect_dmm6500(self, resource):
         """连接DMM6500，优先使用LAN连接"""
         try:
+            # 检查传入的resource是否在device_info中，如果在，使用对应的原始资源名称
+            if resource in self.device_info:
+                actual_resource = self.device_info[resource]
+                print(f"使用原始资源名称: {actual_resource} (从 {resource} 映射)")
+            else:
+                actual_resource = resource
+                print(f"直接使用资源名称: {actual_resource}")
+            
             # 设置连接超时
-            self.dmm6500 = self.rm.open_resource(resource)
+            self.dmm6500 = self.rm.open_resource(actual_resource)
             self.dmm6500.timeout = Config.CONNECTION_TIMEOUT  # 使用配置文件中的超时时间
             
             # 测试连接
@@ -339,8 +360,16 @@ class DeviceController:
     def connect_keysight_34461a(self, resource):
         """连接KEYSIGHT 34461A并设置为DCI模式，优先使用LAN连接"""
         try:
+            # 检查传入的resource是否在device_info中，如果在，使用对应的原始资源名称
+            if resource in self.device_info:
+                actual_resource = self.device_info[resource]
+                print(f"使用原始资源名称: {actual_resource} (从 {resource} 映射)")
+            else:
+                actual_resource = resource
+                print(f"直接使用资源名称: {actual_resource}")
+            
             # 设置连接超时
-            self.keysight_34461a = self.rm.open_resource(resource)
+            self.keysight_34461a = self.rm.open_resource(actual_resource)
             self.keysight_34461a.timeout = Config.CONNECTION_TIMEOUT  # 使用配置文件中的超时时间
             
             # 测试连接
