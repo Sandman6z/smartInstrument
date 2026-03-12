@@ -17,12 +17,14 @@ else:
     from .data.manager import DataManager
     from .config import Config
 
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import pyvisa
 import csv
 from datetime import datetime
 import threading
+from smart_instrument import setup_logging
 
 class AutoTestTool:
     def __init__(self, root):
@@ -1086,9 +1088,17 @@ class AutoTestTool:
     
     def log(self, message, level="INFO"):
         """输出实时日志"""
+        if level == "INFO":
+            logging.info(message)
+        elif level == "WARNING":
+            logging.warning(message)
+        elif level == "ERROR":
+            logging.error(message)
+        else:
+            logging.debug(message)
+            
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] [{level}] {message}"
-        print(log_entry)
+        print(f"[{timestamp}] [{level}] {message}")
     
     def confirm_clear_data(self):
         """确认清除测试数据"""
@@ -1171,6 +1181,7 @@ class AutoTestTool:
         self.root.destroy()
 
 if __name__ == "__main__":
+    setup_logging()
     root = tk.Tk()
     app = AutoTestTool(root)
     root.mainloop()
