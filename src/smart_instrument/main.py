@@ -214,13 +214,25 @@ class AutoTestTool:
         trigger_frame = ttk.LabelFrame(main_frame, text="手动触发", padding="10")
         trigger_frame.pack(fill=tk.X, pady=5)
         
+        # 触发按钮专用样式
+        style = ttk.Style()
+        style.configure("Trigger.TButton",
+                       font=(".SF NS Text", 12, "bold"),
+                       padding=(20, 10),
+                       background="#FF9800",  # 醒目的橙色
+                       foreground="black"
+                      )
+        style.map("Trigger.TButton",
+                 background=[("active", "#FFB74D"), ("disabled", "#e0e0e0")],
+                 foreground=[("disabled", "#a3a3a3")]
+                )
+
         # 触发按钮
-        self.trigger_button = ttk.Button(trigger_frame, text="手动触发记录", command=self.manual_trigger, style="TButton")
+        self.trigger_button = ttk.Button(trigger_frame, text="手动触发", command=self.manual_trigger, style="Trigger.TButton")
         self.trigger_button.pack(pady=10)
         self.trigger_button.config(state=tk.DISABLED)  # 默认禁用
         
-        # 设置按钮样式
-        style = ttk.Style()
+        # 设置通用按钮样式
         style.configure("TButton", font=(".SF NS Text", 12))
         
         # 禁用设备调节组件
