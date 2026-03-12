@@ -8,6 +8,11 @@ class Config:
     # DMM6500默认配置
     DMM6500_DEFAULT_MODE = "VOLT:DC"  # 默认测量模式
     
+    # 设备标识与地址配置
+    IT8811_USB_ID = "0x2EC7::0x8800"
+    DMM6500_IP = "192.168.1.89"
+    KEYSIGHT_HOSTNAME = "K-34461A-15943.local"
+    
     # 连接配置
     CONNECTION_TIMEOUT = 3000  # 连接超时时间（毫秒），设置为平衡响应速度和可靠性的中间值
     

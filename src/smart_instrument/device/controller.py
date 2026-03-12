@@ -108,13 +108,14 @@ class DeviceController:
                         
                         # 检查是否是IT8811设备（基于USB地址特征）
                         is_it8811 = False
-                        if "USB" in connection_type and "0x2EC7" in resource and "0x8800" in resource:
+                        usb_id_parts = Config.IT8811_USB_ID.split("::")
+                        if "USB" in connection_type and usb_id_parts[0] in resource and usb_id_parts[1] in resource:
                             print(f"  基于USB地址特征识别为IT8811设备")
                             is_it8811 = True
                         
                         # 检查是否是DMM6500设备（基于LAN地址特征）
                         is_dmm6500 = False
-                        if "LAN" in connection_type and "192.168.1.89" in resource:
+                        if "LAN" in connection_type and Config.DMM6500_IP in resource:
                             print(f"  基于LAN地址特征识别为DMM6500设备")
                             is_dmm6500 = True
                         
@@ -147,7 +148,7 @@ class DeviceController:
                     
                     # 尝试基于设备地址特征识别DMM6500设备
                     is_dmm6500 = False
-                    if "LAN" in connection_type and "192.168.1.89" in resource:
+                    if "LAN" in connection_type and Config.DMM6500_IP in resource:
                         print(f"  基于LAN地址特征识别为DMM6500设备")
                         is_dmm6500 = True
                     
@@ -174,8 +175,8 @@ class DeviceController:
                 print("未扫描到 Keysight LAN 设备，尝试主动探测...")
                 # 优先尝试 inst0 (兼容性更好)，也可以尝试 hislip0
                 target_addrs = [
-                    "TCPIP0::K-34461A-15943.local::inst0::INSTR",
-                    "TCPIP0::K-34461A-15943.local::hislip0::INSTR"
+                    f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::inst0::INSTR",
+                    f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::hislip0::INSTR"
                 ]
                 
                 for addr in target_addrs:
@@ -204,7 +205,7 @@ class DeviceController:
             # 2. 探测 DMM6500 (通过 IP)
             if not dmm6500_lan_device:
                 print("未扫描到 DMM6500 LAN 设备，尝试主动探测...")
-                target_addr = "TCPIP0::192.168.1.89::inst0::INSTR"
+                target_addr = f"TCPIP0::{Config.DMM6500_IP}::inst0::INSTR"
                 
                 if not any(target_addr in res for res in device_info.values()):
                     try:
@@ -216,7 +217,7 @@ class DeviceController:
                         
                         if "DMM6500" in idn:
                             print(f"  主动探测成功: {idn}")
-                            display_text = f"KEITHLEY DMM6500 (LAN: 192.168.1.89)"
+                            display_text = f"KEITHLEY DMM6500 (LAN: {Config.DMM6500_IP})"
                             device_list.append(display_text)
                             device_info[display_text] = target_addr
                             dmm6500_lan_device = display_text
