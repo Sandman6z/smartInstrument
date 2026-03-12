@@ -34,6 +34,11 @@ class DeviceController:
             
             # 获取每个设备的IDN信息
             for resource in resources:
+                # 跳过ASRL（串口）资源，防止扫描卡顿
+                if resource.startswith("ASRL"):
+                    print(f"跳过串口设备: {resource}")
+                    continue
+
                 print(f"开始扫描设备: {resource}")
                 try:
                     dev = self.rm.open_resource(resource)
@@ -160,6 +165,64 @@ class DeviceController:
                         device_list.append(display_text)
                         device_info[display_text] = resource
             
+            # ---------------------------------------------------------
+            # 主动探测机制：防止 VISA 自动扫描漏掉网络设备
+            # ---------------------------------------------------------
+            
+            # 1. 探测 Keysight 34461A (通过主机名)
+            if not keysight_34461a_lan_device:
+                print("未扫描到 Keysight LAN 设备，尝试主动探测...")
+                # 优先尝试 inst0 (兼容性更好)，也可以尝试 hislip0
+                target_addrs = [
+                    "TCPIP0::K-34461A-15943.local::inst0::INSTR",
+                    "TCPIP0::K-34461A-15943.local::hislip0::INSTR"
+                ]
+                
+                for addr in target_addrs:
+                    # 检查是否已经扫描到了
+                    if any(addr in res for res in device_info.values()):
+                        continue
+                        
+                    try:
+                        print(f"  尝试连接: {addr}")
+                        dev = self.rm.open_resource(addr)
+                        dev.timeout = 2000  # 2秒超时
+                        idn = dev.query("*IDN?").strip()
+                        dev.close()
+                        
+                        if "34461A" in idn:
+                            print(f"  主动探测成功: {idn}")
+                            display_text = f"KEYSIGHT 34461A (LAN: {addr.split('::')[1]})"
+                            device_list.append(display_text)
+                            device_info[display_text] = addr
+                            keysight_34461a_lan_device = display_text
+                            # 找到一个就够了
+                            break
+                    except Exception as e:
+                        print(f"  探测失败: {e}")
+
+            # 2. 探测 DMM6500 (通过 IP)
+            if not dmm6500_lan_device:
+                print("未扫描到 DMM6500 LAN 设备，尝试主动探测...")
+                target_addr = "TCPIP0::192.168.1.89::inst0::INSTR"
+                
+                if not any(target_addr in res for res in device_info.values()):
+                    try:
+                        print(f"  尝试连接: {target_addr}")
+                        dev = self.rm.open_resource(target_addr)
+                        dev.timeout = 2000
+                        idn = dev.query("*IDN?").strip()
+                        dev.close()
+                        
+                        if "DMM6500" in idn:
+                            print(f"  主动探测成功: {idn}")
+                            display_text = f"KEITHLEY DMM6500 (LAN: 192.168.1.89)"
+                            device_list.append(display_text)
+                            device_info[display_text] = target_addr
+                            dmm6500_lan_device = display_text
+                    except Exception as e:
+                        print(f"  探测失败: {e}")
+
             # 优先选择LAN连接的设备
             it8811_device = it8811_lan_device or it8811_usb_device
             dmm6500_device = dmm6500_lan_device or dmm6500_usb_device
