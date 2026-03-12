@@ -288,6 +288,14 @@ class DeviceController:
         if not self.it8811_connected: return False, "Not connected"
         return self.it8811.set_resistance(value)
 
+    def set_load_mode(self, mode):
+        if not self.it8811_connected: return False, "Not connected"
+        return self.it8811.set_mode(mode)
+
+    def set_load_value(self, mode, value):
+        if not self.it8811_connected: return False, "Not connected"
+        return self.it8811.set_value(mode, value)
+
     def toggle_output(self, state):
         if not self.it8811_connected: return False, "Not connected"
         return self.it8811.toggle_output(state)
