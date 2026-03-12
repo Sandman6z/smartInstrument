@@ -215,7 +215,6 @@ class AutoTestTool:
         trigger_frame.pack(fill=tk.X, pady=5)
         
         # 触发按钮专用样式
-        style = ttk.Style()
         style.configure("Trigger.TButton",
                        font=(".SF NS Text", 12, "bold"),
                        padding=(20, 10),
