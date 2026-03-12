@@ -14,51 +14,39 @@ class ControlPanel(ttk.LabelFrame):
         self.disable_controls()
         
     def create_widgets(self):
-        # 模式选择
-        mode_frame = ttk.Frame(self)
-        mode_frame.pack(fill=tk.X, pady=5)
-        
-        ttk.Label(mode_frame, text="工作模式:", width=15).pack(side=tk.LEFT, padx=5)
-        self.mode_var = tk.StringVar(value="CC")
-        self.mode_combo = ttk.Combobox(
-            mode_frame, 
-            textvariable=self.mode_var, 
-            values=["CC", "CV", "CR"], 
-            state="readonly", 
-            width=12
-        )
-        self.mode_combo.pack(side=tk.LEFT, padx=5)
-        self.mode_combo.bind("<<ComboboxSelected>>", self.on_mode_change)
-
-        # 数值调整
+        # 数值调整 (默认电阻模式)
         value_frame = ttk.Frame(self)
         value_frame.pack(fill=tk.X, pady=5)
         
-        self.value_label = ttk.Label(value_frame, text="电流 (A):", width=15)
+        self.value_label = ttk.Label(value_frame, text="电阻 (Ω):", width=15)
         self.value_label.pack(side=tk.LEFT, padx=5)
         
         self.value_entry = ttk.Entry(value_frame, width=15)
         self.value_entry.pack(side=tk.LEFT, padx=5)
-        self.value_entry.insert(0, "0.000")
+        self.value_entry.insert(0, "7500")
         
         self.value_entry.bind("<KeyRelease>", self.on_entry_change)
         self.value_entry.bind("<Return>", lambda e: self.set_value())
         
         # 滑动条
-        self.value_var = tk.DoubleVar(value=0.0)
+        self.value_var = tk.DoubleVar(value=7500.0)
         self.value_scale = ttk.Scale(
             value_frame, 
             from_=0, 
-            to=30, 
+            to=7500, 
             orient=tk.HORIZONTAL, 
             length=200,
             variable=self.value_var,
             command=self.update_entry_from_scale
         )
         self.value_scale.pack(side=tk.LEFT, padx=10)
-        self.value_scale.bind("<ButtonRelease-1>", lambda e: self.set_value())
         
-        ttk.Button(value_frame, text="设置参数", command=self.set_value).pack(side=tk.LEFT, padx=5)
+        # 绑定事件：释放鼠标时发送指令
+        self.value_scale.bind("<ButtonRelease-1>", lambda e: self.set_value())
+        # 绑定滚轮：滚动时调整数值（但不立即发送指令，避免频繁通信）
+        self.value_scale.bind("<MouseWheel>", self.on_mouse_wheel)
+        
+        ttk.Button(value_frame, text="设置电阻", command=self.set_value).pack(side=tk.LEFT, padx=5)
         
         # 开关控制
         switch_frame = ttk.Frame(self)
@@ -78,68 +66,48 @@ class ControlPanel(ttk.LabelFrame):
         self.output_switch.pack(side=tk.LEFT, padx=5)
         
     def enable_controls(self):
-        self.mode_combo.config(state="readonly")
         self.value_entry.config(state=tk.NORMAL)
         self.value_scale.config(state=tk.NORMAL)
         self.output_switch.config(state=tk.NORMAL)
+        
+        # 切换到 CR 模式
+        def init_mode():
+            try:
+                self.controller.set_load_mode("CR")
+            except:
+                pass
+        threading.Thread(target=init_mode, daemon=True).start()
 
     def disable_controls(self):
-        self.mode_combo.config(state=tk.DISABLED)
         self.value_entry.config(state=tk.DISABLED)
         self.value_scale.config(state=tk.DISABLED)
         self.output_switch.config(state=tk.DISABLED)
 
-    def on_mode_change(self, event):
-        new_mode = self.mode_var.get()
-        
-        # 更新界面限制
-        self.update_ui_for_mode(new_mode)
-        
-        # 发送命令
-        def task():
-            try:
-                success, msg = self.controller.set_load_mode(new_mode)
-                if success:
-                    self.current_mode = new_mode
-                    self.after(0, lambda: logging.info(msg))
-                else:
-                    self.after(0, lambda: messagebox.showerror("错误", msg))
-                    # 回滚模式选择
-                    self.after(0, lambda: self.mode_var.set(self.current_mode))
-            except Exception as e:
-                self.after(0, lambda: messagebox.showerror("错误", str(e)))
-        
-        threading.Thread(target=task, daemon=True).start()
-
-    def update_ui_for_mode(self, mode):
-        if mode == "CC":
-            self.value_label.config(text="电流 (A):")
-            self.value_scale.config(from_=0, to=30)
-            self.value_entry.delete(0, tk.END)
-            self.value_entry.insert(0, "0.000")
-        elif mode == "CV":
-            self.value_label.config(text="电压 (V):")
-            self.value_scale.config(from_=0.1, to=120)
-            self.value_entry.delete(0, tk.END)
-            self.value_entry.insert(0, "0.000")
-        elif mode == "CR":
-            self.value_label.config(text="电阻 (Ω):")
-            self.value_scale.config(from_=0.05, to=7500)
-            self.value_entry.delete(0, tk.END)
-            self.value_entry.insert(0, "7500")
+    def on_mouse_wheel(self, event):
+        if str(self.value_scale['state']) == 'disabled':
+            return
             
-        self.value_var.set(float(self.value_entry.get()))
+        # 计算新的值，根据滚轮方向
+        current = self.value_var.get()
+        # event.delta 在 Windows 上通常是 120 的倍数
+        # 基础步长改为 50
+        step = 50 if event.delta > 0 else -50
+        
+        new_val = current + step
+        new_val = max(0, min(7500, new_val))
+        
+        self.value_var.set(new_val)
+        self.update_entry_from_scale(new_val)
+        
+        # 防抖发送指令 (100ms)
+        if hasattr(self, '_debounce_timer') and self._debounce_timer:
+            self.after_cancel(self._debounce_timer)
+        self._debounce_timer = self.after(100, self.set_value)
 
     def on_entry_change(self, event):
         try:
             val = float(self.value_entry.get())
-            # 简单的范围检查
-            mode = self.mode_var.get()
-            if mode == "CC" and 0 <= val <= 30:
-                self.value_var.set(val)
-            elif mode == "CV" and 0 <= val <= 120:
-                self.value_var.set(val)
-            elif mode == "CR" and 0 <= val <= 7500:
+            if 0 <= val <= 7500:
                 self.value_var.set(val)
         except ValueError:
             pass
@@ -147,32 +115,24 @@ class ControlPanel(ttk.LabelFrame):
     def update_entry_from_scale(self, value):
         val = float(value)
         self.value_entry.delete(0, tk.END)
-        if self.mode_var.get() == "CR":
-             self.value_entry.insert(0, f"{int(val)}")
-        else:
-             self.value_entry.insert(0, f"{val:.3f}")
+        # 假设电阻显示整数即可
+        self.value_entry.insert(0, f"{int(val)}")
 
     def set_value(self):
         try:
             val_str = self.value_entry.get()
             val = float(val_str)
-            mode = self.mode_var.get()
             
-            # 验证
-            if mode == "CC" and not (0 <= val <= 30):
-                messagebox.showerror("错误", "电流值必须在 0-30A 之间")
-                return
-            elif mode == "CV" and not (0 <= val <= 120):
-                messagebox.showerror("错误", "电压值必须在 0-120V 之间")
-                return
-            elif mode == "CR" and not (0 <= val <= 7500):
+            if not (0 <= val <= 7500):
                 messagebox.showerror("错误", "电阻值必须在 0-7500Ω 之间")
                 return
 
             def task():
                 try:
-                    success, msg = self.controller.set_load_value(mode, val_str)
-                    self.after(0, lambda: logging.info(msg) if success else messagebox.showerror("错误", msg))
+                     # 直接设置电阻，不再每次都设置模式
+                     success, msg = self.controller.set_resistance(val_str)
+                     
+                     self.after(0, lambda: logging.info(msg) if success else messagebox.showerror("错误", msg))
                 except Exception as e:
                     self.after(0, lambda: messagebox.showerror("错误", str(e)))
             
