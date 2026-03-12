@@ -38,16 +38,7 @@ class DataManager:
             # 生成带日期时间的文件名
             filename = f"test_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             
-            # 删除旧的CSV文件，只保留最新的一个
-            import glob
-            old_files = glob.glob("test_data_*.csv")
-            for old_file in old_files:
-                if old_file != filename:
-                    try:
-                        os.remove(old_file)
-                        print(f"删除旧文件: {old_file}")
-                    except Exception as e:
-                        print(f"删除旧文件失败: {str(e)}")
+
             
             # 写入新的CSV文件
             with open(filename, 'w', newline='') as csvfile:
