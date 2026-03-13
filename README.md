@@ -11,8 +11,8 @@
 - **设备自动扫描与识别**：自动扫描可用的VISA设备，并优先识别LAN连接的设备
 - **设备连接管理**：支持IT8811、DMM6500和KEYSIGHT 34461A的连接、断开操作
 - **IT8811控制**：
-  - 电阻值设置（支持输入框和滑动条调节，范围10-7500Ω）
-  - 输出开关控制（滑动切换按钮）
+  - 电阻值设置（支持输入框和滑动条调节，范围0-7500Ω）
+  - 输出开关控制（支持ON/OFF切换）
 - **DMM6500测量**：实时测量电压值
 - **KEYSIGHT 34461A测量**：实时测量电流值（自动转换为μA单位）
 - **数据记录**：
@@ -36,17 +36,21 @@
 ### 1. 安装依赖
 
 ```bash
-# 使用pip安装依赖
-pip install -r requirements.txt
+# 使用uv安装依赖 (推荐)
+uv sync
 
-# 或使用uv安装依赖
-uv install
+# 或使用pip安装依赖
+pip install -r requirements.txt
 ```
 
 ### 2. 运行应用
 
 ```bash
-python run.py
+# 使用uv运行
+uv run smart_instrument
+
+# 或直接运行入口脚本
+python entry_point.py
 ```
 
 ### 3. 使用步骤
@@ -60,6 +64,54 @@ python run.py
 7. 点击"保存数据到CSV"按钮保存数据
 8. 如需清除数据，点击"清除测试数据"按钮
 
+## 打包与发布
+
+本项目提供了两种打包成独立 EXE 可执行文件的方式。
+
+### 方式一：PyInstaller（标准方式）
+
+使用 PyInstaller 进行打包，兼容性好，但生成的文件体积较大。
+
+1. **安装依赖**
+   ```bash
+   uv add --dev pyinstaller
+   ```
+
+2. **执行打包**
+   ```bash
+   uv run python build_exe.py
+   ```
+
+3. **获取结果**
+   - 生成文件：`dist/SmartInstrument.exe`
+   - 说明：包含完整的 Python 运行时，体积约 35MB+。
+
+### 方式二：Nuitka（推荐方式）
+
+使用 Nuitka 将 Python 代码编译为 C 代码后打包，**运行速度更快，文件体积更小**。
+
+1. **安装依赖**
+   ```bash
+   uv add --dev nuitka zstandard
+   ```
+
+2. **执行打包**
+   ```bash
+   uv run python build_nuitka.py
+   ```
+   > 注意：首次运行时 Nuitka 会自动下载 C 编译器，可能需要一些时间。
+
+3. **获取结果**
+   - 生成文件：`dist_nuitka/SmartInstrument.exe`
+   - 说明：经过编译优化和压缩，体积约 10MB。
+   - 特性：启动速度更快，源码更难被反编译。
+
+### 打包注意事项
+
+1. **驱动依赖**：打包生成的 EXE **不包含** VISA 驱动。用户电脑必须安装 [NI-VISA](https://www.ni.com/zh-cn/support/downloads/drivers/download.ni-visa.html) 或 Keysight IO Libraries 才能正常连接仪器。
+2. **杀毒软件**：Nuitka 编译的程序可能会被部分杀毒软件误报，建议加入信任列表。
+3. **权限问题**：建议将软件放在有读写权限的目录（如桌面）运行，以便正常保存 CSV 数据文件。
+
 ## 设备要求
 
 - IT8811电子负载设备
@@ -70,7 +122,7 @@ python run.py
 ## 依赖库
 
 - pyvisa>=1.14.0：用于与设备通信
-- openpyxl>=3.1.0：用于操作Excel文件
+- tkinter：GUI 界面支持 (Python 内置)
 
 ## 注意事项
 
