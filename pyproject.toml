@@ -26,5 +26,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "nuitka>=4.0.5",
     "pyinstaller>=6.19.0",
+    "zstandard>=0.23.0",
 ]
