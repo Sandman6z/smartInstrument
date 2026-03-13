@@ -86,25 +86,16 @@ class MainWindow:
                 self.connection_panel.dmm6500_status.config(text="未连接", foreground="red")
                 self.connection_panel.keysight_status.config(text="未连接", foreground="red")
                 
-                # 自动连接逻辑：优先连接网络设备
-                connection_tasks = []
+                # 自动连接逻辑：如果有匹配的设备，直接连接
+                # DeviceController 已经筛选了最佳设备（优先 LAN）
                 if it8811:
-                    # 优先级：LAN=0 (高), USB=1 (低)
-                    priority = 0 if "LAN" in it8811 else 1
-                    connection_tasks.append((priority, self.connection_panel.connect_it8811))
+                    self.connection_panel.connect_it8811()
                 
                 if dmm:
-                    priority = 0 if "LAN" in dmm else 1
-                    connection_tasks.append((priority, self.connection_panel.connect_dmm6500))
+                    self.connection_panel.connect_dmm6500()
                 
                 if keysight:
-                    priority = 0 if "LAN" in keysight else 1
-                    connection_tasks.append((priority, self.connection_panel.connect_keysight))
-                
-                # 按优先级排序并执行
-                connection_tasks.sort(key=lambda x: x[0])
-                for _, task in connection_tasks:
-                    task()
+                    self.connection_panel.connect_keysight()
                 
             self.root.after(0, update_ui)
         except Exception as e:
