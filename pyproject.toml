@@ -23,3 +23,8 @@ smart_instrument = "smart_instrument.__main__:main"
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.19.0",
+]
