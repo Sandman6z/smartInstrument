@@ -79,7 +79,7 @@ python entry_point.py
 
 2. **执行打包**
    ```bash
-   uv run python build_exe.py
+   uv run python scripts/build_exe.py
    ```
 
 3. **获取结果**
@@ -97,7 +97,7 @@ python entry_point.py
 
 2. **执行打包**
    ```bash
-   uv run python build_nuitka.py
+   uv run python scripts/build_nuitka.py
    ```
    > 注意：首次运行时 Nuitka 会自动下载 C 编译器，可能需要一些时间。
 

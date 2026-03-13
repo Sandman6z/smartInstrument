@@ -79,7 +79,7 @@ Using PyInstaller for packaging, good compatibility, but larger file size.
 
 2. **Build**
    ```bash
-   uv run python build_exe.py
+   uv run python scripts/build_exe.py
    ```
 
 3. **Get Result**
@@ -97,7 +97,7 @@ Using Nuitka to compile Python code to C code then package, **faster execution, 
 
 2. **Build**
    ```bash
-   uv run python build_nuitka.py
+   uv run python scripts/build_nuitka.py
    ```
    > Note: First run may take time as Nuitka downloads the C compiler.
 

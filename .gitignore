@@ -13,6 +13,8 @@ __pycache__/
 # Egg info
 build/
 dist/
+dist_nuitka/
+*.spec
 *.egg-info/
 *.egg
 
