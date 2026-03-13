@@ -10,8 +10,21 @@ class ConnectionPanel(ttk.LabelFrame):
         self.on_connect_status_change = on_connect_status_change
         
         self.device_info = {}
-        self.create_widgets()
         
+        # 连接锁状态
+        self.connecting_status = {
+            'it8811': False,
+            'dmm6500': False,
+            'keysight': False
+        }
+        
+        self.create_widgets()
+    
+    def _set_connecting(self, device_key, is_connecting):
+        """设置连接中状态"""
+        self.connecting_status[device_key] = is_connecting
+        # 可以根据需要在界面上禁用按钮等
+
     def create_widgets(self):
         # IT8811
         self.it8811_frame = ttk.Frame(self)
@@ -63,13 +76,20 @@ class ConnectionPanel(ttk.LabelFrame):
              self.disconnect_it8811()
              return
 
+        if self.connecting_status['it8811']:
+            logging.info("IT8811 正在连接中，跳过重复请求")
+            return
+            
         selected_text = self.it8811_resource.get()
         if not selected_text:
             messagebox.showwarning("警告", "请选择IT8811资源")
             return
         
         resource = self.device_info.get(selected_text, selected_text)
+        
+        self._set_connecting('it8811', True)
         self.it8811_status.config(text="连接中...", foreground="orange")
+        self.it8811_button.config(state=tk.DISABLED)
         
         def task():
             try:
@@ -81,6 +101,9 @@ class ConnectionPanel(ttk.LabelFrame):
         threading.Thread(target=task, daemon=True).start()
 
     def _on_it8811_connect_result(self, success, msg):
+        self._set_connecting('it8811', False)
+        self.it8811_button.config(state=tk.NORMAL)
+        
         if success:
             self.it8811_status.config(text="已连接", foreground="green")
             self.it8811_button.config(text="断开")
@@ -121,13 +144,20 @@ class ConnectionPanel(ttk.LabelFrame):
              self.disconnect_dmm6500()
              return
 
+        if self.connecting_status['dmm6500']:
+            logging.info("DMM6500 正在连接中，跳过重复请求")
+            return
+
         selected_text = self.dmm6500_resource.get()
         if not selected_text:
             messagebox.showwarning("警告", "请选择DMM6500资源")
             return
         
         resource = self.device_info.get(selected_text, selected_text)
+        
+        self._set_connecting('dmm6500', True)
         self.dmm6500_status.config(text="连接中...", foreground="orange")
+        self.dmm6500_button.config(state=tk.DISABLED)
         
         def task():
             try:
@@ -139,6 +169,9 @@ class ConnectionPanel(ttk.LabelFrame):
         threading.Thread(target=task, daemon=True).start()
 
     def _on_dmm_connect_result(self, success, msg):
+        self._set_connecting('dmm6500', False)
+        self.dmm6500_button.config(state=tk.NORMAL)
+        
         if success:
             self.dmm6500_status.config(text="已连接", foreground="green")
             self.dmm6500_button.config(text="断开")
@@ -179,13 +212,20 @@ class ConnectionPanel(ttk.LabelFrame):
              self.disconnect_keysight()
              return
 
+        if self.connecting_status['keysight']:
+            logging.info("KEYSIGHT 正在连接中，跳过重复请求")
+            return
+
         selected_text = self.keysight_resource.get()
         if not selected_text:
             messagebox.showwarning("警告", "请选择KEYSIGHT资源")
             return
         
         resource = self.device_info.get(selected_text, selected_text)
+        
+        self._set_connecting('keysight', True)
         self.keysight_status.config(text="连接中...", foreground="orange")
+        self.keysight_button.config(state=tk.DISABLED)
         
         def task():
             try:
@@ -197,6 +237,9 @@ class ConnectionPanel(ttk.LabelFrame):
         threading.Thread(target=task, daemon=True).start()
 
     def _on_keysight_connect_result(self, success, msg):
+        self._set_connecting('keysight', False)
+        self.keysight_button.config(state=tk.NORMAL)
+        
         if success:
             self.keysight_status.config(text="已连接", foreground="green")
             self.keysight_button.config(text="断开")

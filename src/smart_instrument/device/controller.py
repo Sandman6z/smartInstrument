@@ -56,8 +56,13 @@ class DeviceController:
     def keysight_34461a_connected(self):
         return self.keysight_34461a.connected if self.keysight_34461a else False
 
-    def scan_devices(self):
-        """扫描可用的VISA设备，优先识别LAN连接的设备"""
+    def scan_devices(self, on_device_found=None):
+        """
+        扫描可用的VISA设备
+        on_device_found: 回调函数，签名 func(display_text, resource, device_key)
+        """
+        import concurrent.futures
+        
         try:
             resources = self.rm.list_resources()
             
@@ -67,12 +72,12 @@ class DeviceController:
             # 临时存储扫描到的设备资源，结构: { 'it8811': {'LAN': '...', 'USB': '...'}, ... }
             found_devices = {k: {'LAN': None, 'USB': None} for k in self.DEVICE_CONFIGS}
             
-            # 1. 遍历扫描到的资源
-            for resource in resources:
+            # 定义单个资源的处理函数
+            def process_resource(resource):
                 if resource.startswith("ASRL"):
                     logging.info(f"跳过串口设备: {resource}")
-                    continue
-
+                    return None
+                
                 logging.info(f"扫描设备: {resource}")
                 idn = self._get_idn(resource)
                 connection_type = "LAN" if "TCPIP" in resource else "USB"
@@ -104,33 +109,57 @@ class DeviceController:
                             matched_key = key
                             display_text = f"{config['display_name']} ({connection_type}: {resource.split('::')[0]})"
                             break
-
-                # 记录设备
-                device_list.append(display_text)
-                device_info[display_text] = resource
                 
-                if matched_key:
-                    logging.info(f"  识别为 {matched_key} ({connection_type})")
-                    found_devices[matched_key][connection_type] = display_text
-                else:
-                    logging.info(f"  未匹配已知设备: {display_text}")
+                return display_text, resource, matched_key, connection_type
 
-            # 2. 主动探测 (针对未扫描到的 LAN 设备)
-            for key, config in self.DEVICE_CONFIGS.items():
-                if not found_devices[key]['LAN'] and 'probe_targets' in config:
-                    for target_addr in config['probe_targets']:
-                        # 如果已经在扫描列表中，跳过
-                        if any(target_addr in res for res in device_info.values()):
-                            continue
+            # 使用线程池并行处理
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # 1. 提交普通扫描任务
+                scan_futures = [executor.submit(process_resource, res) for res in resources]
+                
+                # 2. 提交主动探测任务
+                probe_futures = []
+                for key, config in self.DEVICE_CONFIGS.items():
+                    if 'probe_targets' in config:
+                        for target_addr in config['probe_targets']:
+                            # 如果已经在普通列表中，process_resource 会处理，但为了保险起见，这里作为独立探测任务
+                            # 注意：如果 list_resources 已经包含了这个地址，会重复处理吗？
+                            # VISA list_resources 通常会列出所有发现的。主动探测主要针对未发现的。
+                            # 简单起见，我们定义一个探测函数
+                            def probe_task(k, conf, addr):
+                                if addr in resources: return None # 已在列表中
+                                logging.info(f"尝试主动探测 {k}: {addr}")
+                                if self._probe_device(addr, conf['keywords']):
+                                    disp = f"{conf['display_name']} (LAN: {addr.split('::')[1]})"
+                                    return disp, addr, k, "LAN"
+                                return None
                             
-                        logging.info(f"尝试主动探测 {key}: {target_addr}")
-                        if self._probe_device(target_addr, config['keywords']):
-                            # 探测成功
-                            display_text = f"{config['display_name']} (LAN: {target_addr.split('::')[1]})"
-                            device_list.append(display_text)
-                            device_info[display_text] = target_addr
-                            found_devices[key]['LAN'] = display_text
-                            break # 找到一个即可
+                            probe_futures.append(executor.submit(probe_task, key, config, target_addr))
+
+                # 处理所有结果
+                all_futures = scan_futures + probe_futures
+                for future in concurrent.futures.as_completed(all_futures):
+                    try:
+                        result = future.result()
+                        if result:
+                            d_text, res, m_key, c_type = result
+                            
+                            # 去重
+                            if d_text not in device_list:
+                                device_list.append(d_text)
+                                device_info[d_text] = res
+                                
+                                if m_key:
+                                    logging.info(f"  识别为 {m_key} ({c_type})")
+                                    found_devices[m_key][c_type] = d_text
+                                else:
+                                    logging.info(f"  未匹配已知设备: {d_text}")
+                                
+                                # 实时回调
+                                if on_device_found:
+                                    on_device_found(d_text, res, m_key)
+                    except Exception as e:
+                        logging.error(f"扫描任务异常: {e}")
 
             # 3. 汇总结果 (优先 LAN)
             final_devices = {}
@@ -261,3 +290,49 @@ class DeviceController:
     def get_current(self):
         if not self.keysight_34461a_connected: return False, "Not connected"
         return self.keysight_34461a.get_current()
+        
+    def get_all_measurements(self, default_resistance=None):
+        """并行获取所有测量数据"""
+        import concurrent.futures
+        
+        results = {
+            'resistance': (False, default_resistance),
+            'voltage': (False, "N/A"),
+            'current': (False, "N/A")
+        }
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            future_res = None
+            future_volt = None
+            future_curr = None
+            
+            # 提交任务
+            if self.it8811_connected:
+                future_res = executor.submit(self.it8811.get_resistance)
+            
+            if self.dmm6500_connected:
+                future_volt = executor.submit(self.dmm6500.get_voltage)
+                
+            if self.keysight_34461a_connected:
+                future_curr = executor.submit(self.keysight_34461a.get_current)
+            
+            # 获取结果
+            if future_res:
+                try:
+                    results['resistance'] = future_res.result(timeout=2)
+                except Exception as e:
+                    logging.error(f"获取电阻超时或失败: {e}")
+            
+            if future_volt:
+                try:
+                    results['voltage'] = future_volt.result(timeout=2)
+                except Exception as e:
+                    logging.error(f"获取电压超时或失败: {e}")
+                    
+            if future_curr:
+                try:
+                    results['current'] = future_curr.result(timeout=2)
+                except Exception as e:
+                    logging.error(f"获取电流超时或失败: {e}")
+                    
+        return results
