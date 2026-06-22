@@ -57,7 +57,7 @@ class ConnectionManager:
 
     def __init__(self, resource_manager):
         self.rm = resource_manager
-        self._scanning = False
+        self._scan_lock = threading.Lock()
 
     def _get_idn(self, resource):
         """获取设备的 *IDN? 响应。修复了原版在异常时不关闭资源的问题。"""
@@ -105,11 +105,10 @@ class ConnectionManager:
         返回格式与原始 DeviceController.scan_devices 兼容：
         (device_list, device_info, it8811_dev, dmm6500_dev, keysight_dev)
         """
-        if self._scanning:
+        if not self._scan_lock.acquire(blocking=False):
             logging.warning("扫描正在进行中，跳过重复请求")
             return [], {}, None, None, None
 
-        self._scanning = True
         try:
             resources = self.rm.list_resources()
             device_list = []
@@ -250,7 +249,7 @@ class ConnectionManager:
             logging.error(f"扫描设备失败: {str(e)}")
             return [], {}, None, None, None
         finally:
-            self._scanning = False
+            self._scan_lock.release()
 
     def auto_connect(self, scan_result, device_controller, on_connect=None):
         """自动连接所有已识别设备。
