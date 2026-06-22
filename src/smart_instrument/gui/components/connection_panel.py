@@ -4,26 +4,40 @@ import threading
 import logging
 
 class ConnectionPanel(ttk.LabelFrame):
-    def __init__(self, master, controller, on_connect_status_change=None):
+    def __init__(self, master, controller, on_connect_status_change=None, on_rescan=None):
         super().__init__(master, text="设备连接", padding="10")
         self.controller = controller
         self.on_connect_status_change = on_connect_status_change
-        
+        self.on_rescan = on_rescan  # 重新扫描回调
+
         self.device_info = {}
-        
-        # 连接锁状态
+
         self.connecting_status = {
             'it8811': False,
             'dmm6500': False,
             'keysight': False
         }
-        
+
         self.create_widgets()
     
     def _set_connecting(self, device_key, is_connecting):
         """设置连接中状态"""
         self.connecting_status[device_key] = is_connecting
         # 可以根据需要在界面上禁用按钮等
+
+    def rescan_devices(self):
+        """手动触发重新扫描"""
+        if self.on_rescan:
+            self.rescan_button.config(state=tk.DISABLED)
+            self.status_label.config(text="扫描中...", foreground="orange")
+            for key in ['it8811', 'dmm6500', 'keysight']:
+                status_label_attr = f'{key}_status'
+                if key == 'keysight':
+                    status_label_attr = 'keysight_status'
+                status_label = getattr(self, status_label_attr, None)
+                if status_label:
+                    status_label.config(text="扫描中...", foreground="orange")
+            self.on_rescan()
 
     def create_widgets(self):
         # IT8811
@@ -58,6 +72,20 @@ class ConnectionPanel(ttk.LabelFrame):
         self.keysight_button.pack(side=tk.LEFT, padx=5)
         self.keysight_status = ttk.Label(self.keysight_frame, text="未连接", foreground="red")
         self.keysight_status.pack(side=tk.LEFT, padx=5)
+
+        # 添加重新扫描按钮（放在底部）
+        action_frame = ttk.Frame(self)
+        action_frame.pack(fill=tk.X, pady=(10, 0))
+
+        self.rescan_button = ttk.Button(
+            action_frame,
+            text="重新扫描设备",
+            command=self.rescan_devices
+        )
+        self.rescan_button.pack(side=tk.LEFT, padx=5)
+
+        self.status_label = ttk.Label(action_frame, text="就绪", foreground="gray")
+        self.status_label.pack(side=tk.LEFT, padx=10)
 
     def update_device_list(self, device_list, device_info, it8811_dev, dmm_dev, keysight_dev):
         self.device_info = device_info
@@ -109,12 +137,19 @@ class ConnectionPanel(ttk.LabelFrame):
             self.it8811_button.config(text="断开")
             logging.info(msg)
         else:
-            self.it8811_status.config(text="未连接", foreground="red")
-            messagebox.showerror("错误", msg)
+            self.it8811_status.config(text="错误", foreground="red")
+            self._set_tooltip(self.it8811_status, msg)
             logging.error(msg)
         
         if self.on_connect_status_change:
             self.on_connect_status_change('it8811', success)
+
+    def _set_tooltip(self, widget, text):
+        """为 widget 设置悬停提示"""
+        if hasattr(widget, '_tooltip') and widget._tooltip:
+            widget._tooltip.text = text
+        else:
+            widget._tooltip = ToolTip(widget, text)
 
     def disconnect_it8811(self):
         self.it8811_status.config(text="断开中...", foreground="orange")
@@ -177,8 +212,8 @@ class ConnectionPanel(ttk.LabelFrame):
             self.dmm6500_button.config(text="断开")
             logging.info(msg)
         else:
-            self.dmm6500_status.config(text="未连接", foreground="red")
-            messagebox.showerror("错误", msg)
+            self.dmm6500_status.config(text="错误", foreground="red")
+            self._set_tooltip(self.dmm6500_status, msg)
             logging.error(msg)
         
         if self.on_connect_status_change:
@@ -245,8 +280,8 @@ class ConnectionPanel(ttk.LabelFrame):
             self.keysight_button.config(text="断开")
             logging.info(msg)
         else:
-            self.keysight_status.config(text="未连接", foreground="red")
-            messagebox.showerror("错误", msg)
+            self.keysight_status.config(text="错误", foreground="red")
+            self._set_tooltip(self.keysight_status, msg)
             logging.error(msg)
         
         if self.on_connect_status_change:
@@ -274,3 +309,40 @@ class ConnectionPanel(ttk.LabelFrame):
             
         if self.on_connect_status_change:
             self.on_connect_status_change('keysight', not success)
+
+    def on_scan_complete(self, success=True, message="扫描完成"):
+        """扫描完成后的 UI 更新"""
+        self.rescan_button.config(state=tk.NORMAL)
+        self.status_label.config(
+            text=message,
+            foreground="green" if success else "red"
+        )
+
+
+class ToolTip:
+    """简单悬停提示组件"""
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind('<Enter>', self.show, add='+')
+        widget.bind('<Leave>', self.hide, add='+')
+        widget.bind('<ButtonPress>', self.hide, add='+')
+
+    def show(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(tw, text=self.text, justify=tk.LEFT,
+                         background="#ffffe0", relief=tk.SOLID,
+                         borderwidth=1, wraplength=300)
+        label.pack()
+
+    def hide(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
