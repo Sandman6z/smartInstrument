@@ -13,6 +13,7 @@ class MainWindow:
         self.root = root
         self.device_controller = device_controller
         self.data_manager = data_manager
+        self.connection_manager = device_controller.connection_manager
         
         self.root.title(Config.WINDOW_TITLE)
         self.root.geometry(Config.WINDOW_GEOMETRY)
@@ -31,9 +32,10 @@ class MainWindow:
         
         # 1. 连接面板
         self.connection_panel = ConnectionPanel(
-            main_frame, 
+            main_frame,
             self.device_controller,
-            on_connect_status_change=self.on_device_status_change
+            on_connect_status_change=self.on_device_status_change,
+            on_rescan=self.on_rescan_clicked
         )
         self.connection_panel.pack(fill=tk.X, pady=5)
         
@@ -73,75 +75,155 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def scan_devices(self):
-        # 初始化 UI 状态
-        self.root.after(0, lambda: self.connection_panel.it8811_status.config(text="扫描中...", foreground="orange"))
-        
-        # 实时更新列表
-        current_list = []
-        current_info = {}
-        
+        """新流程：扫描 → 自动连接（单一决策点，无双重触发）"""
         def on_device_found(display_text, resource, device_key):
-            self.root.after(0, lambda: _update_incremental(display_text, resource, device_key))
+            self.root.after(0, lambda: _update_list(display_text, resource, device_key))
 
-        def _update_incremental(display_text, resource, device_key):
-            # 更新数据
+        def _update_list(display_text, resource, device_key):
             if display_text not in current_list:
                 current_list.append(display_text)
                 current_info[display_text] = resource
-                
-                # 更新 UI 下拉列表
-                # 注意：这里需要传入所有参数，所以如果只更新列表，可能需要调整 update_device_list 方法
-                # 或者在这里手动更新 Combobox
-                self.connection_panel.update_device_list(current_list, current_info, None, None, None)
-                
-                # 尝试自动连接
-                if device_key == 'it8811' and not self.device_controller.it8811_connected:
-                    self.connection_panel.it8811_resource.set(display_text)
-                    self.connection_panel.connect_it8811()
-                    
-                elif device_key == 'dmm6500' and not self.device_controller.dmm6500_connected:
-                    self.connection_panel.dmm6500_resource.set(display_text)
-                    self.connection_panel.connect_dmm6500()
-                    
-                elif device_key == 'keysight_34461a' and not self.device_controller.keysight_34461a_connected:
-                    self.connection_panel.keysight_resource.set(display_text)
-                    self.connection_panel.connect_keysight()
+                self.connection_panel.update_device_list(
+                    current_list, current_info, None, None, None
+                )
+
+        current_list = []
+        current_info = {}
 
         try:
-            # 执行扫描（阻塞直到完成，但期间会触发回调）
-            device_list, device_info, it8811, dmm, keysight = self.device_controller.scan_devices(on_device_found=on_device_found)
-            
-            # 扫描完成后的最终状态确认（更新最终的选择，防止自动连接遗漏）
-            def final_update():
-                self.connection_panel.update_device_list(device_list, device_info, it8811, dmm, keysight)
-                
-                # 恢复未连接设备的状态显示
-                if not self.device_controller.it8811_connected:
-                    self.connection_panel.it8811_status.config(text="未连接", foreground="red")
-                if not self.device_controller.dmm6500_connected:
-                    self.connection_panel.dmm6500_status.config(text="未连接", foreground="red")
-                if not self.device_controller.keysight_34461a_connected:
-                    self.connection_panel.keysight_status.config(text="未连接", foreground="red")
-                
-                # 如果有更好的匹配（例如优先 LAN），且当前未连接，则连接
-                # 注意：如果在 _update_incremental 中已经连接了 USB，这里扫描完发现了 LAN，
-                # 是否要切换？目前逻辑是保持已连接状态。
-                # 如果还未连接，尝试连接最终推荐的
-                if it8811 and not self.device_controller.it8811_connected:
-                    # 更新选择
-                    self.connection_panel.it8811_resource.set(it8811)
-                    self.connection_panel.connect_it8811()
-                if dmm and not self.device_controller.dmm6500_connected:
-                    self.connection_panel.dmm6500_resource.set(dmm)
-                    self.connection_panel.connect_dmm6500()
-                if keysight and not self.device_controller.keysight_34461a_connected:
-                    self.connection_panel.keysight_resource.set(keysight)
-                    self.connection_panel.connect_keysight()
-                
-            self.root.after(0, final_update)
-            
+            # Phase 1: 仅扫描（不触发连接）
+            scan_result = self.device_controller.scan_devices(
+                on_device_found=on_device_found
+            )
+            device_list, device_info, it8811, dmm, keysight = scan_result
+
+            def phase2_connect():
+                """Phase 2: 扫描完成后统一自动连接"""
+                self.connection_panel.update_device_list(
+                    device_list, device_info, it8811, dmm, keysight
+                )
+
+                if not any([it8811, dmm, keysight]):
+                    self.connection_panel.on_scan_complete(False, "未找到设备")
+                    logging.warning("扫描完成，未找到任何已知设备")
+                    return
+
+                self.connection_panel.status_label.config(
+                    text="正在连接设备...", foreground="orange"
+                )
+
+                def on_connect(device_key, success, msg):
+                    self.root.after(0, lambda: self._update_device_status(
+                        device_key, success, msg
+                    ))
+
+                self.connection_manager.auto_connect(
+                    scan_result, self.device_controller, on_connect=on_connect
+                )
+
+                # 检查最终状态
+                connected_count = sum([
+                    self.device_controller.it8811_connected,
+                    self.device_controller.dmm6500_connected,
+                    self.device_controller.keysight_34461a_connected,
+                ])
+                total = sum([1 for d in [it8811, dmm, keysight] if d])
+                if connected_count == total:
+                    msg = f"所有设备已连接 ({connected_count}/{total})"
+                    self.connection_panel.on_scan_complete(True, msg)
+                elif connected_count > 0:
+                    msg = f"部分设备已连接 ({connected_count}/{total})"
+                    self.connection_panel.on_scan_complete(True, msg)
+                else:
+                    msg = "设备连接失败，请检查后重新扫描"
+                    self.connection_panel.on_scan_complete(False, msg)
+
+            self.root.after(0, phase2_connect)
+
         except Exception as e:
             logging.error(f"扫描失败: {e}")
+            self.root.after(0, lambda: self.connection_panel.on_scan_complete(
+                False, f"扫描失败: {str(e)}"
+            ))
+
+    def on_rescan_clicked(self):
+        """用户点击重新扫描按钮"""
+        threading.Thread(target=self.rescan_devices, daemon=True).start()
+
+    def rescan_devices(self):
+        """重新扫描并连接（与 scan_devices 共享逻辑）"""
+        def on_device_found(display_text, resource, device_key):
+            self.root.after(0, lambda: _update_list(display_text, resource, device_key))
+
+        def _update_list(display_text, resource, device_key):
+            if display_text not in current_list:
+                current_list.append(display_text)
+                current_info[display_text] = resource
+                self.connection_panel.update_device_list(
+                    current_list, current_info, None, None, None
+                )
+
+        current_list = []
+        current_info = {}
+
+        # 先断开所有已连接设备
+        if self.device_controller.dmm6500_connected:
+            self.device_controller.disconnect_dmm6500()
+        if self.device_controller.keysight_34461a_connected:
+            self.device_controller.disconnect_keysight_34461a()
+        if self.device_controller.it8811_connected:
+            self.device_controller.disconnect_it8811()
+
+        try:
+            scan_result = self.device_controller.scan_devices(
+                on_device_found=on_device_found
+            )
+
+            def reconnect():
+                self.connection_panel.update_device_list(
+                    scan_result[0], scan_result[1],
+                    scan_result[2], scan_result[3], scan_result[4]
+                )
+
+                if not any([scan_result[2], scan_result[3], scan_result[4]]):
+                    self.connection_panel.on_scan_complete(False, "未找到设备")
+                    return
+
+                self.connection_panel.status_label.config(
+                    text="正在连接设备...", foreground="orange"
+                )
+
+                def on_connect(device_key, success, msg):
+                    self.root.after(0, lambda: self._update_device_status(
+                        device_key, success, msg
+                    ))
+
+                self.connection_manager.auto_connect(
+                    scan_result, self.device_controller, on_connect=on_connect
+                )
+
+                connected = sum([
+                    self.device_controller.it8811_connected,
+                    self.device_controller.dmm6500_connected,
+                    self.device_controller.keysight_34461a_connected,
+                ])
+                total = sum([1 for d in [
+                    scan_result[2], scan_result[3], scan_result[4]
+                ] if d])
+                if connected == total:
+                    self.connection_panel.on_scan_complete(True, f"所有设备已连接 ({connected}/{total})")
+                elif connected > 0:
+                    self.connection_panel.on_scan_complete(True, f"部分设备已连接 ({connected}/{total})")
+                else:
+                    self.connection_panel.on_scan_complete(False, "设备连接失败")
+
+            self.root.after(0, reconnect)
+
+        except Exception as e:
+            logging.error(f"重新扫描失败: {e}")
+            self.root.after(0, lambda: self.connection_panel.on_scan_complete(
+                False, f"重新扫描失败: {str(e)}"
+            ))
 
     def on_device_status_change(self, device_type, connected):
         # 检查是否所有设备都连接，启用触发按钮
@@ -161,6 +243,39 @@ class MainWindow:
                 self.control_panel.enable_controls()
             else:
                 self.control_panel.disable_controls()
+
+    def _update_device_status(self, device_key, success, msg):
+        """统一的设备状态更新（供 scan_devices 和 rescan_devices 共用）"""
+        status_map = {
+            'it8811': ('it8811_status', 'it8811_button'),
+            'dmm6500': ('dmm6500_status', 'dmm6500_button'),
+            'keysight_34461a': ('keysight_status', 'keysight_button'),
+        }
+        mapper = {
+            'it8811': 'it8811',
+            'dmm6500': 'dmm6500',
+            'keysight_34461a': 'keysight',
+        }
+
+        config = status_map.get(device_key)
+        if not config:
+            return
+
+        status_attr, button_attr = config
+        panel = self.connection_panel
+        status_label = getattr(panel, status_attr)
+        button = getattr(panel, button_attr)
+
+        if success:
+            status_label.config(text="已连接", foreground="green")
+            button.config(text="断开")
+        else:
+            status_label.config(text="错误", foreground="red")
+            panel._set_tooltip(status_label, msg)
+
+        panel._set_connecting(mapper.get(device_key, device_key), False)
+        button.config(state=tk.NORMAL)
+        self.on_device_status_change(device_key, success)
 
     def manual_trigger(self):
         if self.is_collecting:
