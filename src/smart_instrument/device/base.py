@@ -46,11 +46,17 @@ class BaseInstrument(ABC):
 
     def write(self, command):
         if self.instrument:
-            self.instrument.write(command)
+            bytes_sent = self.instrument.write(command)
+            logging.debug(f"[{self.__class__.__name__}] >> {command!r} (sent {bytes_sent} bytes)")
+            return bytes_sent
+        logging.warning(f"[{self.__class__.__name__}] >> {command!r} FAILED: no instrument")
+        return 0
 
     def query(self, command):
         if self.instrument:
-            return self.instrument.query(command).strip()
+            resp = self.instrument.query(command)
+            logging.debug(f"[{self.__class__.__name__}] >> {command!r} << {resp!r}")
+            return resp.strip()
         raise Exception("Device not connected")
 
     def configure_connection(self):
