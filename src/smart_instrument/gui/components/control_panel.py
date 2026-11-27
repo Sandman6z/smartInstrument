@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 import logging
+from ...config import Config
 
 class ControlPanel(ttk.LabelFrame):
     def __init__(self, master, controller):
@@ -119,8 +120,8 @@ class ControlPanel(ttk.LabelFrame):
         # 计算新的值，根据滚轮方向
         current = self.value_var.get()
         # event.delta 在 Windows 上通常是 120 的倍数
-        # 基础步长改为 50
-        step = 50 if event.delta > 0 else -50
+        # 步长与 Config.RESISTANCE_STEP 保持一致
+        step = Config.RESISTANCE_STEP if event.delta > 0 else -Config.RESISTANCE_STEP
         
         new_val = current + step
         new_val = max(100, min(7500, new_val))

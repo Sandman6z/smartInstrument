@@ -16,6 +16,9 @@ class Config:
     # 连接配置
     CONNECTION_TIMEOUT = 3000  # 连接超时时间（毫秒），设置为平衡响应速度和可靠性的中间值
     
+    # 电阻调节步长（同时也是自动采集的最小步长）
+    RESISTANCE_STEP = 100  # Ω
+
     # GUI配置
     WINDOW_TITLE = "自动化测试工具"
     WINDOW_GEOMETRY = "1000x600"  # 窗口大小，减少纵向尺寸

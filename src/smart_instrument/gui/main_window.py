@@ -399,7 +399,7 @@ class MainWindow:
         logging.info("用户请求停止自动采集")
 
     def auto_collect(self):
-        """自动采集：从当前电阻开始，每次减50Ω，间隔1s，测量V×I，差值>20时记录"""
+        """自动采集：从当前电阻开始，每次减100Ω，间隔1s，测量V×I，差值>20时记录"""
         if self.is_collecting:
             return
         self.is_collecting = True
@@ -432,8 +432,9 @@ class MainWindow:
                     self.root.after(0, lambda: messagebox.showwarning("提示", "当前电阻已低于 100Ω，无法自动采集"))
                     return
 
-                # 向下取整到最近的50的倍数，确保从完整档位开始
-                current_res = int(current_res // 50 * 50)
+                # 向下取整到最近的步长的倍数，确保从完整档位开始
+                step = Config.RESISTANCE_STEP
+                current_res = int(current_res // step * step)
                 if current_res < 100:
                     current_res = 100
 
@@ -480,14 +481,14 @@ class MainWindow:
                             self.root.after(0, lambda: messagebox.showerror("错误", "DMM6500 连接已断开，自动采集终止"))
                             break
                         # 单次电压读取失败但设备还在，继续下一步
-                        current_res -= 50
+                        current_res -= step
                         continue
 
                     # 解析数值用于计算功率
                     try:
                         voltage_val = float(voltage_str)
                     except (ValueError, TypeError):
-                        current_res -= 50
+                        current_res -= step
                         continue
 
                     try:
@@ -536,8 +537,8 @@ class MainWindow:
                     # 更新前一次功率值
                     prev_power = power
 
-                    # 减少 50Ω
-                    current_res -= 50
+                    # 减少 step Ω
+                    current_res -= step
 
                 # 循环结束
                 if current_res < 100 or not all_connected:
