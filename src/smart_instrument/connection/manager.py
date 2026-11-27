@@ -1,13 +1,10 @@
 """设备连接管理器 - 负责扫描、识别、去重、自动连接"""
-import pyvisa
 import logging
 import time
 import threading
 import concurrent.futures
-from .models import DeviceEntry, ScanResult, ConnectResult
+from .models import DeviceEntry
 from ..config import Config
-from ..device.load import IT8811
-from ..device.multimeter import DMM6500, Keysight34461A
 
 
 class ConnectionManager:
@@ -19,14 +16,11 @@ class ConnectionManager:
     3. 按策略顺序/并发连接设备
     """
 
-    # 设备配置（从 DeviceController 迁移而来）
+    # VISA 资源识别与探测规则；不依赖具体驱动类。
     DEVICE_CONFIGS = {
         'it8811': {
             'keywords': ['IT8811'],
-            'driver_class': IT8811,
-            'attr_name': 'it8811',
             'display_name': 'ITECH IT8811',
-            'connection_type': 'USB',
             'usb_id_check': lambda r: (
                 Config.IT8811_USB_ID.split("::")[0] in r
                 and Config.IT8811_USB_ID.split("::")[1] in r
@@ -35,19 +29,13 @@ class ConnectionManager:
         },
         'dmm6500': {
             'keywords': ['DMM6500'],
-            'driver_class': DMM6500,
-            'attr_name': 'dmm6500',
             'display_name': 'KEITHLEY DMM6500',
-            'connection_type': 'LAN',
             'lan_ip_check': lambda r: Config.DMM6500_IP in r,
             'probe_targets': [f"TCPIP0::{Config.DMM6500_IP}::inst0::INSTR"],
         },
         'keysight_34461a': {
             'keywords': ['34461A'],
-            'driver_class': Keysight34461A,
-            'attr_name': 'keysight_34461a',
             'display_name': 'KEYSIGHT 34461A',
-            'connection_type': 'LAN',
             'probe_targets': [
                 f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::inst0::INSTR",
                 f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::hislip0::INSTR",

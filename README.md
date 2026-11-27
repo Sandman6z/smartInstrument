@@ -1,147 +1,54 @@
-[English Version](README.en.md) | 中文
+[English](README.en.md) | 中文
 
 # 自动化测试工具
 
-## 项目概述
+通过 Tkinter 图形界面控制 ITECH IT8811 电子负载，使用 Keithley DMM6500 和 Keysight 34461A 采集电压和电流，并将测量结果导出为 CSV。
 
-这是一个用于电子测试设备的自动化测试工具，提供了直观的GUI界面，方便用户进行设备控制和数据采集。支持IT8811（电子负载）、DMM6500（数字万用表）和KEYSIGHT 34461A（万用表）设备。
+## 安装与启动
 
-## 主要功能
+- 下载 Windows 可执行文件：见 [GitHub Releases](https://github.com/Sandman6z/smartInstrument/releases)。
+- 从源码运行：需要带 Tkinter 的 Python；CI 使用 Windows 和 Python 3.11 检查普通安装。
+- 无论用哪种方式运行，连接仪器的电脑都需要安装 VISA 后端，例如 [NI-VISA](https://www.ni.com/zh-cn/support/downloads/drivers/download.ni-visa.html) 或 Keysight IO Libraries。Windows EXE 不包含这些驱动。
 
-- **设备自动扫描与识别**：自动扫描可用的VISA设备，并优先识别LAN连接的设备
-- **设备连接管理**：支持IT8811、DMM6500和KEYSIGHT 34461A的连接、断开操作
-- **IT8811控制**：
-  - 电阻值设置（支持输入框和滑动条调节，范围0-7500Ω）
-  - 输出开关控制（支持ON/OFF切换）
-- **DMM6500测量**：实时测量电压值
-- **KEYSIGHT 34461A测量**：实时测量电流值（自动转换为μA单位）
-- **数据记录**：
-  - 手动触发数据采集
-  - 数据实时显示在表格中
-  - 数据保存到CSV文件
-  - 支持清除测试数据
-- **实时日志**：操作日志实时输出
-
-## 技术特点
-
-- 使用tkinter构建直观的GUI界面
-- 使用pyvisa库与设备进行通信
-- 采用多线程处理设备通信，避免UI阻塞
-- 具有良好的错误处理和日志记录机制
-- 支持多种设备命令格式，提高兼容性
-- 智能设备识别，优先选择LAN连接的设备
-
-## 安装与使用
-
-### 1. 安装依赖
+在仓库根目录执行（二选一）：
 
 ```bash
-# 使用uv安装依赖 (推荐)
-uv sync
-
-# 或使用pip安装依赖
-pip install -r requirements.txt
+# uv（按锁文件安装运行依赖）
+uv sync --locked --no-dev
+uv run --locked --no-dev smart_instrument
 ```
-
-### 2. 运行应用
 
 ```bash
-# 使用uv运行
-uv run smart_instrument
-
-# 或直接运行入口脚本
-python entry_point.py
+# pip（建议在已激活的虚拟环境中执行）
+python -m pip install .
+python -m smart_instrument
 ```
 
-### 3. 使用步骤
+## 操作流程
 
-1. 启动应用后，系统会自动扫描可用的VISA设备并尝试自动连接识别的设备
-2. 如未自动连接，可手动选择并连接IT8811、DMM6500和KEYSIGHT 34461A设备
-3. 设置IT8811的电阻值（可通过输入框或滑动条调节）
-4. 控制IT8811的输出开关
-5. 点击"手动触发记录"按钮采集数据
-6. 数据会实时显示在表格中
-7. 点击"保存数据到CSV"按钮保存数据
-8. 如需清除数据，点击"清除测试数据"按钮
+1. 启动后，应用会扫描 VISA 资源并尝试连接识别到的设备；同一设备有多个连接方式时优先使用 LAN。未自动连接时，可从下拉列表选择地址后手动连接。
+2. 在输入框或滑动条设置 IT8811 电阻（`100–7500 Ω`）。在滑动条上滚动鼠标滚轮时，每次调整 `100 Ω`。
+3. 连接全部三台仪器并将电子负载的**输入状态**切到 `ON` 后，可点击「手动触发」采集一次，或点击「自动采集」按 `100 Ω` 档位向下采集。自动采集只在相邻有效测量的功率差超过 `20 W` 时记录，可手动停止；采集期间不要断开仪器。
+4. 数据在「数据记录」表格内横向展开，可用水平滚动条查看。从「文件 → 保存数据到CSV」导出到当前工作目录。未导出的数据不会自动保留，清除数据或退出前请先保存。
 
 ## 打包与发布
 
-本项目提供了两种打包成独立 EXE 可执行文件的方式。
+在 Windows 的仓库根目录执行：
 
-### 方式一：PyInstaller（标准方式）
+```bash
+uv sync --locked --group dev
+uv run --locked python scripts/build_nuitka.py  # dist_nuitka/SmartInstrument.exe
+uv run --locked python scripts/build_exe.py     # dist/SmartInstrument.exe
+```
 
-使用 PyInstaller 进行打包，兼容性好，但生成的文件体积较大。
-
-1. **安装依赖**
-   ```bash
-   uv add --dev pyinstaller
-   ```
-
-2. **执行打包**
-   ```bash
-   uv run python scripts/build_exe.py
-   ```
-
-3. **获取结果**
-   - 生成文件：`dist/SmartInstrument.exe`
-   - 说明：包含完整的 Python 运行时，体积约 35MB+。
-
-### 方式二：Nuitka（推荐方式）
-
-使用 Nuitka 将 Python 代码编译为 C 代码后打包，**运行速度更快，文件体积更小**。
-
-1. **安装依赖**
-   ```bash
-   uv add --dev nuitka zstandard
-   ```
-
-2. **执行打包**
-   ```bash
-   uv run python scripts/build_nuitka.py
-   ```
-   > 注意：首次运行时 Nuitka 会自动下载 C 编译器，可能需要一些时间。
-
-3. **获取结果**
-   - 生成文件：`dist_nuitka/SmartInstrument.exe`
-   - 说明：经过编译优化和压缩，体积约 10MB。
-   - 特性：启动速度更快，源码更难被反编译。
-
-### 打包注意事项
-
-1. **驱动依赖**：打包生成的 EXE **不包含** VISA 驱动。用户电脑必须安装 [NI-VISA](https://www.ni.com/zh-cn/support/downloads/drivers/download.ni-visa.html) 或 Keysight IO Libraries 才能正常连接仪器。
-2. **杀毒软件**：Nuitka 编译的程序可能会被部分杀毒软件误报，建议加入信任列表。
-3. **权限问题**：建议将软件放在有读写权限的目录（如桌面）运行，以便正常保存 CSV 数据文件。
-
-## 设备要求
-
-- IT8811电子负载设备
-- DMM6500数字万用表设备
-- KEYSIGHT 34461A万用表设备（可选）
-- VISA驱动程序（需要提前安装）
-
-## 依赖库
-
-- pyvisa>=1.14.0：用于与设备通信
-- tkinter：GUI 界面支持 (Python 内置)
-
-## 注意事项
-
-1. 确保已正确安装VISA驱动程序
-2. 确保设备已正确连接到计算机
-3. 操作设备前请确保了解设备的基本操作方法
-4. 数据采集过程中请勿断开设备连接
+正式发布使用 Nuitka。首次打包可能需要下载 C 编译工具。发布流程见 [RELEASE.md](RELEASE.md)，模块边界和维护检查见 [工程架构](docs/architecture.md)。
 
 ## 故障排除
 
-- **设备未找到**：检查设备连接和VISA驱动安装
-- **连接失败**：检查设备地址是否正确，设备是否正常工作
-- **命令执行失败**：设备可能处于异常状态，尝试重新连接设备
-- **数据采集超时**：检查设备响应时间，可能需要调整超时设置
-
-## 版本历史
-
-- v0.1.0：初始版本
+- **设备未找到或连接失败**：确认 VISA 后端已安装、仪器在线、USB 或 LAN 连接可用。默认识别和探测配置见 [`config.py`](src/smart_instrument/config.py)。
+- **无法采集**：检查三台仪器的连接状态以及 IT8811 输入状态。
+- **无法导出**：确认启动时的工作目录可写。运行日志位于该目录下的 `logs/`。
 
 ## 许可证
 
-MIT License
+[GNU GPL v3](LICENSE)。

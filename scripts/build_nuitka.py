@@ -31,11 +31,8 @@ def build():
     
     print(f"Running command: {' '.join(cmd)}")
     
-    try:
-        subprocess.check_call(cmd)
-        print("\nBuild complete! Check dist_nuitka/SmartInstrument.exe")
-    except subprocess.CalledProcessError as e:
-        print(f"\nBuild failed with error code {e.returncode}")
+    subprocess.run(cmd, check=True)
+    print("\nBuild complete! Check dist_nuitka/SmartInstrument.exe")
 
 if __name__ == "__main__":
     build()

@@ -1,0 +1,28 @@
+name: Package Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  installed-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+      - name: Install non-editable package
+        run: uv sync --locked --no-dev --no-editable
+      - name: Check installed entry points without launching the GUI
+        run: >-
+          uv run --no-sync python -I -c "from importlib.metadata import distribution;
+          from smart_instrument.__main__ import main;
+          from smart_instrument.main import main as app_main;
+          entry = next(ep for ep in distribution('auto-test-tool').entry_points if ep.group == 'console_scripts' and ep.name == 'smart_instrument');
+          assert entry.load() is app_main is main"

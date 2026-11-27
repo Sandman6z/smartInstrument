@@ -1,41 +1,16 @@
 import pyvisa
-import time
 import logging
 import threading
-from ..config import Config
 from ..connection import ConnectionManager
 from .load import IT8811
 from .multimeter import DMM6500, Keysight34461A
 
 class DeviceController:
-    # 设备配置定义
-    DEVICE_CONFIGS = {
-        'it8811': {
-            'keywords': ['IT8811'],
-            'driver_class': IT8811,
-            'attr_name': 'it8811', # 对应 self.it8811
-            'display_name': 'ITECH IT8811',
-            'usb_id_check': lambda r: Config.IT8811_USB_ID.split("::")[0] in r and Config.IT8811_USB_ID.split("::")[1] in r,
-            'probe_targets': [] # IT8811 主要是 USB，暂无主动探测 IP
-        },
-        'dmm6500': {
-            'keywords': ['DMM6500'],
-            'driver_class': DMM6500,
-            'attr_name': 'dmm6500',
-            'display_name': 'KEITHLEY DMM6500',
-            'lan_ip_check': lambda r: Config.DMM6500_IP in r,
-            'probe_targets': [f"TCPIP0::{Config.DMM6500_IP}::inst0::INSTR"]
-        },
-        'keysight_34461a': {
-            'keywords': ['34461A'],
-            'driver_class': Keysight34461A,
-            'attr_name': 'keysight_34461a',
-            'display_name': 'KEYSIGHT 34461A',
-            'probe_targets': [
-                f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::inst0::INSTR",
-                f"TCPIP0::{Config.KEYSIGHT_HOSTNAME}::hislip0::INSTR"
-            ]
-        }
+    # 设备键对应同名的控制器属性；VISA 识别规则由 ConnectionManager 管理。
+    DRIVER_CLASSES = {
+        'it8811': IT8811,
+        'dmm6500': DMM6500,
+        'keysight_34461a': Keysight34461A,
     }
 
     def __init__(self):
@@ -65,18 +40,16 @@ class DeviceController:
     def _connect_device(self, device_key, resource):
         """通用连接方法"""
         with self._connecting_lock:
-            config = self.DEVICE_CONFIGS.get(device_key)
-            if not config:
+            driver_class = self.DRIVER_CLASSES.get(device_key)
+            if driver_class is None:
                 return False, f"未知设备类型: {device_key}"
 
             try:
-                # 实例化驱动类
-                driver = config['driver_class'](self.rm, resource)
+                driver = driver_class(self.rm, resource)
                 success, msg = driver.connect()
 
                 if success:
-                    # 设置到对应的属性上 (self.it8811 等)
-                    setattr(self, config['attr_name'], driver)
+                    setattr(self, device_key, driver)
 
                 return success, msg
             except Exception as e:
@@ -85,11 +58,10 @@ class DeviceController:
     def _disconnect_device(self, device_key):
         """通用断开方法"""
         with self._connecting_lock:
-            config = self.DEVICE_CONFIGS.get(device_key)
-            if not config:
+            if device_key not in self.DRIVER_CLASSES:
                 return True, "未知设备"
 
-            driver = getattr(self, config['attr_name'])
+            driver = getattr(self, device_key)
             if driver:
                 result = driver.disconnect()
                 # 断开后不置为 None，保持对象存在但 connected=False，或者根据需求处理
