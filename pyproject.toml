@@ -8,17 +8,15 @@ authors = [
 requires-python = ">=3.8"
 dependencies = [
     "pyvisa>=1.14.0",
-    "openpyxl>=3.1.0",
 ]
 
-[tool.setuptools]
-packages = ["smart_instrument"]
-
-[tool.setuptools.package-dir]
-smart_instrument = "src/smart_instrument"
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["smart_instrument", "smart_instrument.*"]
+namespaces = false
 
 [project.scripts]
-smart_instrument = "smart_instrument.__main__:main"
+smart_instrument = "smart_instrument.main:main"
 
 [build-system]
 requires = ["setuptools", "wheel"]
